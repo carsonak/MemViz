@@ -2,12 +2,44 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/memviz/backend/internal/debugger"
 )
+
+// WSMessage represents a WebSocket message exchanged with the frontend
+type WSMessage struct {
+	Type      string          `json:"type"`
+	Payload   json.RawMessage `json:"payload"`
+	RequestID string          `json:"request_id,omitempty"`
+}
+
+// LaunchPayload is the payload for "launch" messages
+type LaunchPayload struct {
+	ProgramPath string `json:"program_path"`
+}
+
+// MemoryUpdatePayload wraps a MemoryGraph for "memory_update" messages
+type MemoryUpdatePayload struct {
+	Graph *debugger.MemoryGraph `json:"graph"`
+}
+
+// StatusPayload is the payload for "status" messages
+type StatusPayload struct {
+	Connected bool   `json:"connected"`
+	Debugging bool   `json:"debugging"`
+	Program   string `json:"program,omitempty"`
+}
+
+// ErrorPayload is the payload for "error" messages
+type ErrorPayload struct {
+	Message string `json:"message"`
+	Code    string `json:"code,omitempty"`
+}
 
 // Server represents the MemViz WebSocket server
 type Server struct {
@@ -70,9 +102,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("Client connected")
 
-	// TODO: Integrate with debugger session handler
+	var client debugger.Client
+
 	for {
-		messageType, message, err := conn.ReadMessage()
+		_, message, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket error: %v", err)
@@ -82,10 +115,91 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("Received: %s", message)
 
-		// Echo for now - will be replaced with debugger commands
-		if err := conn.WriteMessage(messageType, message); err != nil {
-			log.Printf("Write error: %v", err)
-			break
+		var msg WSMessage
+		if err := json.Unmarshal(message, &msg); err != nil {
+			sendError(conn, "", "invalid message format", "parse_error")
+			continue
+		}
+
+		switch msg.Type {
+		case "launch":
+			client = debugger.NewMockClient()
+			if err := client.LaunchProgram(context.Background(), ""); err != nil {
+				sendError(conn, msg.RequestID, err.Error(), "launch_error")
+				continue
+			}
+			sendJSON(conn, WSMessage{
+				Type:      "status",
+				RequestID: msg.RequestID,
+				Payload:   marshalPayload(StatusPayload{Connected: true, Debugging: true}),
+			})
+
+		case "step_over", "step_into", "step_out", "continue":
+			if client == nil {
+				sendError(conn, msg.RequestID, "no active debug session", "no_session")
+				continue
+			}
+			if err := execDebugAction(client, msg.Type); err != nil {
+				sendError(conn, msg.RequestID, err.Error(), "debug_error")
+				continue
+			}
+			graph, err := client.GetMemoryGraph(context.Background(), 3)
+			if err != nil {
+				sendError(conn, msg.RequestID, err.Error(), "graph_error")
+				continue
+			}
+			sendJSON(conn, WSMessage{
+				Type:      "memory_update",
+				RequestID: msg.RequestID,
+				Payload:   marshalPayload(MemoryUpdatePayload{Graph: graph}),
+			})
+
+		default:
+			sendError(conn, msg.RequestID, "unknown message type: "+msg.Type, "unknown_type")
 		}
 	}
+}
+
+func execDebugAction(client debugger.Client, action string) error {
+	ctx := context.Background()
+	var err error
+	switch action {
+	case "step_over":
+		_, err = client.StepOver(ctx)
+	case "step_into":
+		_, err = client.StepInto(ctx)
+	case "step_out":
+		_, err = client.StepOut(ctx)
+	case "continue":
+		_, err = client.Continue(ctx)
+	}
+	return err
+}
+
+func sendJSON(conn *websocket.Conn, msg WSMessage) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("JSON marshal error: %v", err)
+		return
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		log.Printf("Write error: %v", err)
+	}
+}
+
+func sendError(conn *websocket.Conn, requestID, message, code string) {
+	sendJSON(conn, WSMessage{
+		Type:      "error",
+		RequestID: requestID,
+		Payload:   marshalPayload(ErrorPayload{Message: message, Code: code}),
+	})
+}
+
+func marshalPayload(v interface{}) json.RawMessage {
+	data, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("Payload marshal error: %v", err)
+		return json.RawMessage(`{}`)
+	}
+	return data
 }

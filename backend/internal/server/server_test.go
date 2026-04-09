@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -46,7 +47,7 @@ func TestServer_WebSocketUpgrade(t *testing.T) {
 	assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
 }
 
-func TestServer_WebSocketEcho(t *testing.T) {
+func TestServer_WebSocketLaunch(t *testing.T) {
 	srv := New("0")
 
 	server := httptest.NewServer(http.HandlerFunc(srv.handleWebSocket))
@@ -62,15 +63,130 @@ func TestServer_WebSocketEcho(t *testing.T) {
 	require.NoError(t, err)
 	defer conn.Close()
 
-	// Send a test message
-	testMsg := []byte(`{"type":"test","payload":{}}`)
-	err = conn.WriteMessage(websocket.TextMessage, testMsg)
+	// Send launch message
+	launchMsg := `{"type":"launch","payload":{"program_path":"main.go"},"request_id":"req-1"}`
+	err = conn.WriteMessage(websocket.TextMessage, []byte(launchMsg))
 	require.NoError(t, err)
 
-	// Read the echo response
+	// Read status response
 	_, msg, err := conn.ReadMessage()
 	require.NoError(t, err)
-	assert.Equal(t, testMsg, msg)
+
+	var resp WSMessage
+	err = json.Unmarshal(msg, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "status", resp.Type)
+	assert.Equal(t, "req-1", resp.RequestID)
+
+	var status StatusPayload
+	err = json.Unmarshal(resp.Payload, &status)
+	require.NoError(t, err)
+	assert.True(t, status.Connected)
+	assert.True(t, status.Debugging)
+}
+
+func TestServer_WebSocketStepOver(t *testing.T) {
+	srv := New("0")
+
+	server := httptest.NewServer(http.HandlerFunc(srv.handleWebSocket))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
+
+	conn, _, err := dialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Launch first
+	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"launch","payload":{}}`))
+	require.NoError(t, err)
+	_, _, _ = conn.ReadMessage() // consume status response
+
+	// Step over
+	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"step_over","payload":{},"request_id":"req-2"}`))
+	require.NoError(t, err)
+
+	_, msg, err := conn.ReadMessage()
+	require.NoError(t, err)
+
+	var resp WSMessage
+	err = json.Unmarshal(msg, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "memory_update", resp.Type)
+	assert.Equal(t, "req-2", resp.RequestID)
+
+	var update MemoryUpdatePayload
+	err = json.Unmarshal(resp.Payload, &update)
+	require.NoError(t, err)
+	assert.NotNil(t, update.Graph)
+	assert.Len(t, update.Graph.StackBlocks, 2)
+	assert.Len(t, update.Graph.HeapBlocks, 2)
+	assert.Len(t, update.Graph.Pointers, 1)
+	assert.Equal(t, 1, update.Graph.StepNumber)
+}
+
+func TestServer_WebSocketStepWithoutLaunch(t *testing.T) {
+	srv := New("0")
+
+	server := httptest.NewServer(http.HandlerFunc(srv.handleWebSocket))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
+
+	conn, _, err := dialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Step without launching
+	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"step_over","payload":{}}`))
+	require.NoError(t, err)
+
+	_, msg, err := conn.ReadMessage()
+	require.NoError(t, err)
+
+	var resp WSMessage
+	err = json.Unmarshal(msg, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "error", resp.Type)
+
+	var errPayload ErrorPayload
+	err = json.Unmarshal(resp.Payload, &errPayload)
+	require.NoError(t, err)
+	assert.Equal(t, "no_session", errPayload.Code)
+}
+
+func TestServer_WebSocketUnknownType(t *testing.T) {
+	srv := New("0")
+
+	server := httptest.NewServer(http.HandlerFunc(srv.handleWebSocket))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
+
+	conn, _, err := dialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Send unknown type
+	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"bogus","payload":{}}`))
+	require.NoError(t, err)
+
+	_, msg, err := conn.ReadMessage()
+	require.NoError(t, err)
+
+	var resp WSMessage
+	err = json.Unmarshal(msg, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "error", resp.Type)
+
+	var errPayload ErrorPayload
+	err = json.Unmarshal(resp.Payload, &errPayload)
+	require.NoError(t, err)
+	assert.Equal(t, "unknown_type", errPayload.Code)
+	assert.Contains(t, errPayload.Message, "bogus")
 }
 
 func TestServer_New(t *testing.T) {

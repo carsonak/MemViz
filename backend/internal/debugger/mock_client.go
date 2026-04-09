@@ -2,6 +2,7 @@ package debugger
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -234,64 +235,84 @@ func (m *MockClient) GetMemoryGraph(ctx context.Context, maxDepth int) (*MemoryG
 		return m.MockMemoryGraph, nil
 	}
 
-	// Return a sample memory graph for testing
+	// Return a realistic memory graph that varies per step
+	return m.buildRealisticGraph(), nil
+}
+
+// buildRealisticGraph constructs a realistic MemoryGraph simulating a Go program
+// with a string on the stack pointing to heap-allocated byte data, plus a struct.
+func (m *MockClient) buildRealisticGraph() *MemoryGraph {
+	step := m.stepNumber
+	line := 10 + step
+
 	return &MemoryGraph{
 		Timestamp:  time.Now().UnixNano(),
-		StepNumber: m.stepNumber,
+		StepNumber: step,
 		StopState: &StopState{
 			Reason:      StopReasonStep,
 			File:        "main.go",
-			Line:        10,
+			Line:        line,
 			Function:    "main.main",
 			GoroutineID: 1,
 		},
 		StackBlocks: []*MemoryBlock{
 			{
 				ID:        "stack-1",
-				Address:   0xc000012000,
-				Size:      8,
-				Type:      "int",
-				Kind:      "int",
-				Name:      "x",
-				Value:     "42",
-				IsStack:   true,
-				Variables: []string{"x"},
-			},
-			{
-				ID:        "stack-2",
-				Address:   0xc000012008,
+				Address:   0xc000000100,
 				Size:      16,
 				Type:      "string",
 				Kind:      "string",
-				Name:      "msg",
+				Name:      "greeting",
 				Value:     "hello",
 				IsStack:   true,
-				Variables: []string{"msg"},
+				Variables: []string{"greeting"},
+			},
+			{
+				ID:        "stack-2",
+				Address:   0xc000000110,
+				Size:      8,
+				Type:      "int",
+				Kind:      "int",
+				Name:      "count",
+				Value:     fmt.Sprintf("%d", step*10),
+				IsStack:   true,
+				Variables: []string{"count"},
 			},
 		},
 		HeapBlocks: []*MemoryBlock{
 			{
 				ID:        "heap-1",
-				Address:   0xc000100000,
-				Size:      24,
-				Type:      "*MyStruct",
-				Kind:      "ptr",
-				Name:      "ptr",
+				Address:   0x1400000000,
+				Size:      5,
+				Type:      "[]byte",
+				Kind:      "slice",
+				Name:      "[5]byte",
+				Value:     "hello",
 				IsStack:   false,
-				Variables: []string{"ptr"},
+				Variables: []string{"greeting.data"},
+			},
+			{
+				ID:        "heap-2",
+				Address:   0x1400000040,
+				Size:      32,
+				Type:      "Config",
+				Kind:      "struct",
+				Name:      "cfg",
+				IsStack:   false,
+				Variables: []string{"cfg"},
 			},
 		},
 		Pointers: []*Pointer{
 			{
 				ID:         "ptr-1",
-				SourceID:   "stack-3",
+				SourceID:   "stack-1",
 				TargetID:   "heap-1",
-				SourceAddr: 0xc000012018,
-				TargetAddr: 0xc000100000,
-				FieldName:  "ptr",
+				SourceAddr: 0xc000000100,
+				TargetAddr: 0x1400000000,
+				FieldName:  "greeting",
 			},
 		},
-	}, nil
+	}
 }
 
 // Helper methods for testing

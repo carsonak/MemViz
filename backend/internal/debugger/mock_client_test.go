@@ -120,6 +120,41 @@ func TestMockClient_GetMemoryGraph(t *testing.T) {
 	assert.NotNil(t, graph.StopState)
 }
 
+func TestMockClient_GetMemoryGraph_RealisticContent(t *testing.T) {
+	client := NewMockClient()
+	_ = client.Connect(context.Background(), "localhost:2345")
+
+	// Step once so stepNumber=1
+	_, _ = client.StepOver(context.Background())
+
+	graph, err := client.GetMemoryGraph(context.Background(), 3)
+	require.NoError(t, err)
+
+	// 2 stack blocks with realistic addresses
+	assert.Len(t, graph.StackBlocks, 2)
+	assert.Equal(t, "greeting", graph.StackBlocks[0].Name)
+	assert.Equal(t, uint64(0xc000000100), graph.StackBlocks[0].Address)
+	assert.Equal(t, "count", graph.StackBlocks[1].Name)
+	assert.Equal(t, uint64(0xc000000110), graph.StackBlocks[1].Address)
+	assert.Equal(t, "10", graph.StackBlocks[1].Value) // step 1 * 10
+
+	// 2 heap blocks with realistic addresses
+	assert.Len(t, graph.HeapBlocks, 2)
+	assert.Equal(t, uint64(0x1400000000), graph.HeapBlocks[0].Address)
+	assert.Equal(t, "slice", graph.HeapBlocks[0].Kind)
+	assert.Equal(t, uint64(0x1400000040), graph.HeapBlocks[1].Address)
+	assert.Equal(t, "struct", graph.HeapBlocks[1].Kind)
+
+	// 1 pointer: string header -> byte array
+	assert.Len(t, graph.Pointers, 1)
+	assert.Equal(t, "stack-1", graph.Pointers[0].SourceID)
+	assert.Equal(t, "heap-1", graph.Pointers[0].TargetID)
+
+	// Step-varying line number
+	assert.Equal(t, 1, graph.StepNumber)
+	assert.Equal(t, 11, graph.StopState.Line) // 10 + step
+}
+
 func TestMockClient_EvaluateExpression(t *testing.T) {
 	client := NewMockClient()
 	_ = client.Connect(context.Background(), "localhost:2345")

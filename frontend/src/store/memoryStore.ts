@@ -5,7 +5,15 @@ import type {
   Pointer,
   Breakpoint,
   StopState,
+  WSMessage,
+  WSMessageType,
+  MemoryUpdatePayload,
+  StatusPayload,
+  ErrorPayload,
 } from "../types";
+
+/** Module-level WebSocket reference (kept outside store for non-serializable state) */
+let ws: WebSocket | null = null;
 
 /** Maximum number of historical memory states to keep */
 const MAX_HISTORY_LENGTH = 100;
@@ -45,6 +53,11 @@ interface MemoryState {
   setShowPointers: (show: boolean) => void;
   setZoomLevel: (level: number) => void;
   reset: () => void;
+
+  // WebSocket actions
+  connect: (url?: string) => void;
+  disconnect: () => void;
+  sendMessage: (type: WSMessageType, payload?: unknown) => void;
 }
 
 const initialState = {
@@ -64,7 +77,7 @@ const initialState = {
   zoomLevel: 1,
 };
 
-export const useMemoryStore = create<MemoryState>((set) => ({
+export const useMemoryStore = create<MemoryState>((set, get) => ({
   ...initialState,
 
   setConnected: (connected) => set({ isConnected: connected }),
@@ -113,5 +126,72 @@ export const useMemoryStore = create<MemoryState>((set) => ({
 
   setZoomLevel: (level) => set({ zoomLevel: level }),
 
-  reset: () => set(initialState),
+  connect: (url = "ws://localhost:8080/ws") => {
+    if (ws && ws.readyState === WebSocket.OPEN) return;
+
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      set({ isConnected: true });
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg: WSMessage = JSON.parse(event.data);
+
+        switch (msg.type) {
+          case "memory_update": {
+            const payload = msg.payload as MemoryUpdatePayload;
+            get().updateMemoryGraph(payload.graph);
+            break;
+          }
+          case "status": {
+            const payload = msg.payload as StatusPayload;
+            set({
+              isConnected: payload.connected,
+              isDebugging: payload.debugging,
+            });
+            break;
+          }
+          case "error": {
+            const payload = msg.payload as ErrorPayload;
+            console.error(`[MemViz] ${payload.code}: ${payload.message}`);
+            break;
+          }
+        }
+      } catch (e) {
+        console.error("[MemViz] Failed to parse message:", e);
+      }
+    };
+
+    ws.onclose = () => {
+      set({ isConnected: false, isDebugging: false });
+      ws = null;
+    };
+
+    ws.onerror = (err) => {
+      console.error("[MemViz] WebSocket error:", err);
+    };
+  },
+
+  disconnect: () => {
+    ws?.close();
+    ws = null;
+    set({ isConnected: false, isDebugging: false });
+  },
+
+  sendMessage: (type, payload = {}) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.warn("[MemViz] WebSocket not connected");
+      return;
+    }
+    const msg: WSMessage = { type, payload };
+    ws.send(JSON.stringify(msg));
+  },
+
+  reset: () => {
+    ws?.close();
+    ws = null;
+    set(initialState);
+  },
 }));

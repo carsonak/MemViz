@@ -43,11 +43,17 @@ func TestBuilder_SimpleVariables(t *testing.T) {
 	assert.Empty(t, graph.HeapBlocks)
 	assert.Equal(t, 1, graph.StepNumber)
 
-	// Check first block
-	assert.Equal(t, "x", graph.StackBlocks[0].Name)
-	assert.Equal(t, "int", graph.StackBlocks[0].Type)
-	assert.Equal(t, uint64(0xc000012000), graph.StackBlocks[0].Address)
-	assert.True(t, graph.StackBlocks[0].IsStack)
+	// Build a name-keyed lookup so iteration order doesn't matter.
+	byName := make(map[string]*debugger.MemoryBlock, len(graph.StackBlocks))
+	for _, b := range graph.StackBlocks {
+		byName[b.Name] = b
+	}
+
+	xBlock := byName["x"]
+	require.NotNil(t, xBlock)
+	assert.Equal(t, "int", xBlock.Type)
+	assert.Equal(t, uint64(0xc000012000), xBlock.Address)
+	assert.True(t, xBlock.IsStack)
 }
 
 func TestBuilder_PointerVariable(t *testing.T) {

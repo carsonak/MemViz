@@ -43,7 +43,8 @@ func NewMockClient() *MockClient {
 	}
 }
 
-func (m *MockClient) Connect(ctx context.Context, addr string) error {
+// Connect simulates establishing a connection. If ConnectError is set it is returned.
+func (m *MockClient) Connect(_ context.Context, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -55,6 +56,7 @@ func (m *MockClient) Connect(ctx context.Context, addr string) error {
 	return nil
 }
 
+// Disconnect marks the client as disconnected.
 func (m *MockClient) Disconnect() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -63,7 +65,8 @@ func (m *MockClient) Disconnect() error {
 	return nil
 }
 
-func (m *MockClient) LaunchProgram(ctx context.Context, programPath string) error {
+// LaunchProgram marks the client as connected. If LaunchError is set it is returned.
+func (m *MockClient) LaunchProgram(_ context.Context, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -75,7 +78,8 @@ func (m *MockClient) LaunchProgram(ctx context.Context, programPath string) erro
 	return nil
 }
 
-func (m *MockClient) SetBreakpoint(ctx context.Context, file string, line int) (*Breakpoint, error) {
+// SetBreakpoint creates a breakpoint and records it in the internal map.
+func (m *MockClient) SetBreakpoint(_ context.Context, file string, line int) (*Breakpoint, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -99,7 +103,8 @@ func (m *MockClient) SetBreakpoint(ctx context.Context, file string, line int) (
 	return bp, nil
 }
 
-func (m *MockClient) ClearBreakpoint(ctx context.Context, id int) error {
+// ClearBreakpoint removes the breakpoint with the given ID.
+func (m *MockClient) ClearBreakpoint(_ context.Context, id int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -111,7 +116,8 @@ func (m *MockClient) ClearBreakpoint(ctx context.Context, id int) error {
 	return nil
 }
 
-func (m *MockClient) Continue(ctx context.Context) (*StopState, error) {
+// Continue advances the step counter and returns a "breakpoint" StopState.
+func (m *MockClient) Continue(_ context.Context) (*StopState, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -138,15 +144,18 @@ func (m *MockClient) Continue(ctx context.Context) (*StopState, error) {
 	}, nil
 }
 
-func (m *MockClient) StepOver(ctx context.Context) (*StopState, error) {
+// StepOver advances the step counter via a "step" reason.
+func (m *MockClient) StepOver(_ context.Context) (*StopState, error) {
 	return m.step(StopReasonStep)
 }
 
-func (m *MockClient) StepInto(ctx context.Context) (*StopState, error) {
+// StepInto advances the step counter via a "step" reason.
+func (m *MockClient) StepInto(_ context.Context) (*StopState, error) {
 	return m.step(StopReasonStep)
 }
 
-func (m *MockClient) StepOut(ctx context.Context) (*StopState, error) {
+// StepOut advances the step counter via a "step" reason.
+func (m *MockClient) StepOut(_ context.Context) (*StopState, error) {
 	return m.step(StopReasonStep)
 }
 
@@ -176,7 +185,8 @@ func (m *MockClient) step(reason StopReason) (*StopState, error) {
 	}, nil
 }
 
-func (m *MockClient) GetLocalVariables(ctx context.Context) ([]*Variable, error) {
+// GetLocalVariables returns MockVariables if set, otherwise a default variable set.
+func (m *MockClient) GetLocalVariables(_ context.Context) ([]*Variable, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -212,7 +222,8 @@ func (m *MockClient) GetLocalVariables(ctx context.Context) ([]*Variable, error)
 	}, nil
 }
 
-func (m *MockClient) EvaluateExpression(ctx context.Context, expr string) (*Variable, error) {
+// EvaluateExpression returns a placeholder Variable named after the expression.
+func (m *MockClient) EvaluateExpression(_ context.Context, expr string) (*Variable, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -230,7 +241,8 @@ func (m *MockClient) EvaluateExpression(ctx context.Context, expr string) (*Vari
 	}, nil
 }
 
-func (m *MockClient) GetMemoryGraph(ctx context.Context, maxDepth int) (*MemoryGraph, error) {
+// GetMemoryGraph returns MockMemoryGraph if set, otherwise a realistic hardcoded graph.
+func (m *MockClient) GetMemoryGraph(_ context.Context, _ int) (*MemoryGraph, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

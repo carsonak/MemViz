@@ -70,6 +70,7 @@ type StopState struct {
 // StopReason indicates why the debugger stopped
 type StopReason string
 
+// Possible stop reasons.
 const (
 	StopReasonBreakpoint StopReason = "breakpoint"
 	StopReasonStep       StopReason = "step"

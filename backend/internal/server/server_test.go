@@ -42,7 +42,7 @@ func TestServer_WebSocketUpgrade(t *testing.T) {
 
 	conn, resp, err := dialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
 }
@@ -61,7 +61,7 @@ func TestServer_WebSocketLaunch(t *testing.T) {
 
 	conn, _, err := dialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send launch message
 	launchMsg := `{"type":"launch","payload":{"program_path":"main.go"},"request_id":"req-1"}`
@@ -96,7 +96,7 @@ func TestServer_WebSocketStepOver(t *testing.T) {
 
 	conn, _, err := dialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Launch first
 	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"launch","payload":{}}`))
@@ -137,7 +137,7 @@ func TestServer_WebSocketStepWithoutLaunch(t *testing.T) {
 
 	conn, _, err := dialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Step without launching
 	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"step_over","payload":{}}`))
@@ -168,7 +168,7 @@ func TestServer_WebSocketUnknownType(t *testing.T) {
 
 	conn, _, err := dialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send unknown type
 	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"bogus","payload":{}}`))

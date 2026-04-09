@@ -147,7 +147,7 @@ type createBreakpointOut struct {
 
 // clearBreakpointIn is the argument for RPCServer.ClearBreakpoint.
 type clearBreakpointIn struct {
-	Id int
+	ID int `json:"id"`
 }
 
 // clearBreakpointOut is the reply from RPCServer.ClearBreakpoint.
@@ -233,7 +233,7 @@ func (d *DelveClient) LaunchProgram(ctx context.Context, programPath string) err
 		return fmt.Errorf("finding free port: %w", err)
 	}
 	addr := listener.Addr().String()
-	listener.Close()
+	_ = listener.Close()
 
 	cmd := exec.CommandContext(ctx, "dlv", "debug", programPath,
 		"--headless",
@@ -253,8 +253,8 @@ func (d *DelveClient) LaunchProgram(ctx context.Context, programPath string) err
 	if err := d.Connect(ctx, addr); err != nil {
 		d.mu.Lock()
 		if d.process != nil {
-			d.process.Process.Kill()
-			d.process.Wait()
+			_ = d.process.Process.Kill()
+			_ = d.process.Wait()
 			d.process = nil
 		}
 		d.mu.Unlock()
@@ -321,7 +321,7 @@ func (d *DelveClient) Disconnect() error {
 	}
 
 	if d.conn != nil {
-		d.conn.Close()
+		_ = d.conn.Close()
 		d.conn = nil
 	}
 
@@ -331,7 +331,7 @@ func (d *DelveClient) Disconnect() error {
 				errs = append(errs, fmt.Sprintf("killing delve process: %v", err))
 			}
 		}
-		d.process.Wait()
+		_ = d.process.Wait()
 		d.process = nil
 	}
 
@@ -354,7 +354,7 @@ func processAlreadyFinished(err error) bool {
 // ---------------------------------------------------------------------------
 
 // SetBreakpoint registers a breakpoint at the given source file and line.
-func (d *DelveClient) SetBreakpoint(ctx context.Context, file string, line int) (*Breakpoint, error) {
+func (d *DelveClient) SetBreakpoint(_ context.Context, file string, line int) (*Breakpoint, error) {
 	client, err := d.rpc()
 	if err != nil {
 		return nil, err
@@ -377,14 +377,14 @@ func (d *DelveClient) SetBreakpoint(ctx context.Context, file string, line int) 
 }
 
 // ClearBreakpoint removes the breakpoint with the given Delve-assigned ID.
-func (d *DelveClient) ClearBreakpoint(ctx context.Context, id int) error {
+func (d *DelveClient) ClearBreakpoint(_ context.Context, id int) error {
 	client, err := d.rpc()
 	if err != nil {
 		return err
 	}
 
 	var out clearBreakpointOut
-	if err := client.Call("RPCServer.ClearBreakpoint", clearBreakpointIn{Id: id}, &out); err != nil {
+	if err := client.Call("RPCServer.ClearBreakpoint", clearBreakpointIn{ID: id}, &out); err != nil {
 		return fmt.Errorf("clearing breakpoint %d: %w", id, err)
 	}
 	return nil
@@ -395,22 +395,22 @@ func (d *DelveClient) ClearBreakpoint(ctx context.Context, id int) error {
 // ---------------------------------------------------------------------------
 
 // Continue resumes execution and stops at the next breakpoint.
-func (d *DelveClient) Continue(ctx context.Context) (*StopState, error) {
+func (d *DelveClient) Continue(_ context.Context) (*StopState, error) {
 	return d.execCommand("continue")
 }
 
 // StepOver executes the next source line without entering function calls.
-func (d *DelveClient) StepOver(ctx context.Context) (*StopState, error) {
+func (d *DelveClient) StepOver(_ context.Context) (*StopState, error) {
 	return d.execCommand("next")
 }
 
 // StepInto executes the next source line, entering function calls.
-func (d *DelveClient) StepInto(ctx context.Context) (*StopState, error) {
+func (d *DelveClient) StepInto(_ context.Context) (*StopState, error) {
 	return d.execCommand("step")
 }
 
 // StepOut continues execution until the current function returns.
-func (d *DelveClient) StepOut(ctx context.Context) (*StopState, error) {
+func (d *DelveClient) StepOut(_ context.Context) (*StopState, error) {
 	return d.execCommand("stepOut")
 }
 
@@ -473,7 +473,7 @@ func stateToStopState(state *dlvDebuggerState, command string) *StopState {
 // ---------------------------------------------------------------------------
 
 // GetLocalVariables retrieves all local variables in the current top frame.
-func (d *DelveClient) GetLocalVariables(ctx context.Context) ([]*Variable, error) {
+func (d *DelveClient) GetLocalVariables(_ context.Context) ([]*Variable, error) {
 	client, err := d.rpc()
 	if err != nil {
 		return nil, err
@@ -502,7 +502,7 @@ func (d *DelveClient) GetLocalVariables(ctx context.Context) ([]*Variable, error
 }
 
 // EvaluateExpression evaluates an arbitrary expression using the Delve Eval RPC.
-func (d *DelveClient) EvaluateExpression(ctx context.Context, expr string) (*Variable, error) {
+func (d *DelveClient) EvaluateExpression(_ context.Context, expr string) (*Variable, error) {
 	client, err := d.rpc()
 	if err != nil {
 		return nil, err
@@ -522,7 +522,7 @@ func (d *DelveClient) EvaluateExpression(ctx context.Context, expr string) (*Var
 // GetMemoryGraph builds a full memory graph from the current local variables
 // using the injected BuildGraphFunc. The caller must set BuildGraphFunc before
 // calling this method (typically wired to graph.NewBuilder().BuildFromVariables).
-func (d *DelveClient) GetMemoryGraph(ctx context.Context, maxDepth int) (*MemoryGraph, error) {
+func (d *DelveClient) GetMemoryGraph(ctx context.Context, _ int) (*MemoryGraph, error) {
 	d.mu.Lock()
 	buildFn := d.BuildGraphFunc
 	d.mu.Unlock()

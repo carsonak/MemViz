@@ -12,12 +12,24 @@ import type {
   ErrorPayload,
 } from "../types";
 
-/** Module-level WebSocket reference (kept outside store for non-serializable state) */
+/**
+ * Zustand store that holds all MemViz frontend state: the active memory graph,
+ * historical snapshots for time-travel, WebSocket lifecycle, and UI selection state.
+ */
+/** Module-level WebSocket instance, kept outside Zustand to avoid serialisation issues. */
 let ws: WebSocket | null = null;
 
-/** Maximum number of historical memory states to keep */
+/** Maximum number of historical memory states to keep in the time-travel buffer. */
 const MAX_HISTORY_LENGTH = 100;
 
+/**
+ * Complete shape of the Zustand memory store, combining state slices and action methods.
+ *
+ * history – ring buffer of past MemoryGraph snapshots, capped at MAX_HISTORY_LENGTH.
+ * selectedBlockId / hoveredBlockId – IDs of the user-selected and pointer-hovered blocks.
+ * showPointers – whether pointer arrows are rendered; auto-enabled on block selection.
+ * zoomLevel – semantic zoom factor used by the scene renderer.
+ */
 interface MemoryState {
   // Connection state
   isConnected: boolean;
@@ -31,35 +43,30 @@ interface MemoryState {
   heapBlocks: MemoryBlock[];
   pointers: Pointer[];
   breakpoints: Breakpoint[];
-
-  // Historical states for time-travel visualization
   history: MemoryGraph[];
-
-  // UI state
   selectedBlockId: string | null;
   hoveredBlockId: string | null;
   showPointers: boolean;
   zoomLevel: number;
-
-  // Actions
   setConnected: (connected: boolean) => void;
   setDebugging: (debugging: boolean) => void;
   setProgramPath: (path: string | null) => void;
   updateMemoryGraph: (graph: MemoryGraph) => void;
   addBreakpoint: (bp: Breakpoint) => void;
   removeBreakpoint: (id: number) => void;
+  /** Selects a block; also enables pointer rendering when a block is selected. */
   setSelectedBlock: (id: string | null) => void;
   setHoveredBlock: (id: string | null) => void;
   setShowPointers: (show: boolean) => void;
   setZoomLevel: (level: number) => void;
   reset: () => void;
-
-  // WebSocket actions
+  /** Opens a WebSocket connection to the backend and begins processing messages. url defaults to the local dev server. */
   connect: (url?: string) => void;
   disconnect: () => void;
   sendMessage: (type: WSMessageType, payload?: unknown) => void;
 }
 
+/** Zero-value snapshot used by reset() to restore the store to its initial state. */
 const initialState = {
   isConnected: false,
   isDebugging: false,
@@ -88,7 +95,6 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
   updateMemoryGraph: (graph) =>
     set((state) => {
-      // Add to history, maintaining max length
       const newHistory = [...state.history, graph];
       if (newHistory.length > MAX_HISTORY_LENGTH) {
         newHistory.shift();
@@ -117,7 +123,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   setSelectedBlock: (id) =>
     set({
       selectedBlockId: id,
-      showPointers: id !== null, // Auto-show pointers when selecting a block
+      showPointers: id !== null,
     }),
 
   setHoveredBlock: (id) => set({ hoveredBlockId: id }),

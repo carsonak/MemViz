@@ -1,6 +1,7 @@
 /**
- * Memory Graph Types - Shared data contracts between backend and frontend
- * These mirror the Go structs in backend/internal/debugger/debugger.go
+ * Memory Graph Types – shared data contracts between the Go backend and the React frontend.
+ * These interfaces mirror the JSON-serialised forms of the Go structs in
+ * backend/internal/debugger/debugger.go.
  */
 
 /** Represents why the debugger stopped */
@@ -15,7 +16,10 @@ export interface StopState {
   goroutine_id: number;
 }
 
-/** A variable in memory */
+/** A variable in memory.
+ *
+ * pointer_target – the address the variable points to, set only for pointer kinds.
+ */
 export interface Variable {
   name: string;
   type: string;
@@ -27,7 +31,10 @@ export interface Variable {
   pointer_target?: number;
 }
 
-/** A contiguous block of memory */
+/** A contiguous block of memory.
+ *
+ * variables – names of the source-level variables contained within this block.
+ */
 export interface MemoryBlock {
   id: string;
   address: number;
@@ -70,9 +77,10 @@ export interface Breakpoint {
 }
 
 /**
- * WebSocket Message Types
+ * All action and event names used in the WebSocket message protocol.
+ * Client-to-server actions: launch, set_breakpoint, clear_breakpoint, continue, step_*.
+ * Server-to-client events: memory_update, error, status.
  */
-
 export type WSMessageType =
   | "connect"
   | "launch"
@@ -87,6 +95,10 @@ export type WSMessageType =
   | "error"
   | "status";
 
+/** A WebSocket protocol envelope.
+ *
+ * request_id – optional correlation token echoed in the server's reply.
+ */
 export interface WSMessage<T = unknown> {
   type: WSMessageType;
   payload: T;

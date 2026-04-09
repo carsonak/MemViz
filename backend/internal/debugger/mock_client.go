@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-// MockClient is a mock implementation of the Client interface for testing
+// MockClient is a mock implementation of Client for use in tests.
+// All behaviour is configurable through its exported fields.
 type MockClient struct {
 	mu          sync.Mutex
 	connected   bool
@@ -15,17 +16,23 @@ type MockClient struct {
 	nextBpID    int
 	stepNumber  int
 
-	// Mock configuration
-	MockVariables   []*Variable
-	MockStopState   *StopState
+	// MockVariables is returned by GetLocalVariables when set.
+	MockVariables []*Variable
+	// MockStopState is returned by step/continue methods when set.
+	MockStopState *StopState
+	// MockMemoryGraph is returned by GetMemoryGraph when set.
 	MockMemoryGraph *MemoryGraph
 
-	// Error injection for testing error handling
-	ConnectError       error
-	LaunchError        error
+	// ConnectError, when non-nil, is returned by Connect.
+	ConnectError error
+	// LaunchError, when non-nil, is returned by LaunchProgram.
+	LaunchError error
+	// SetBreakpointError, when non-nil, is returned by SetBreakpoint.
 	SetBreakpointError error
-	ContinueError      error
-	GetVariablesError  error
+	// ContinueError, when non-nil, is returned by Continue.
+	ContinueError error
+	// GetVariablesError, when non-nil, is returned by GetLocalVariables.
+	GetVariablesError error
 }
 
 // NewMockClient creates a new mock debugger client
@@ -143,6 +150,7 @@ func (m *MockClient) StepOut(ctx context.Context) (*StopState, error) {
 	return m.step(StopReasonStep)
 }
 
+// step advances the step counter and returns a StopState with the given reason.
 func (m *MockClient) step(reason StopReason) (*StopState, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -184,7 +192,6 @@ func (m *MockClient) GetLocalVariables(ctx context.Context) ([]*Variable, error)
 		return m.MockVariables, nil
 	}
 
-	// Return sample variables for testing
 	return []*Variable{
 		{
 			Name:    "x",
@@ -235,12 +242,12 @@ func (m *MockClient) GetMemoryGraph(ctx context.Context, maxDepth int) (*MemoryG
 		return m.MockMemoryGraph, nil
 	}
 
-	// Return a realistic memory graph that varies per step
 	return m.buildRealisticGraph(), nil
 }
 
-// buildRealisticGraph constructs a realistic MemoryGraph simulating a Go program
-// with a string on the stack pointing to heap-allocated byte data, plus a struct.
+// buildRealisticGraph returns a MemoryGraph simulating a Go program with a
+// stack-allocated string header pointing to heap byte data, plus a heap struct.
+// The count value and stop line advance with each step to simulate live debugging.
 func (m *MockClient) buildRealisticGraph() *MemoryGraph {
 	step := m.stepNumber
 	line := 10 + step
@@ -317,21 +324,21 @@ func (m *MockClient) buildRealisticGraph() *MemoryGraph {
 
 // Helper methods for testing
 
-// SetMockVariables sets the variables that will be returned by GetLocalVariables
+// SetMockVariables sets the variables returned by GetLocalVariables.
 func (m *MockClient) SetMockVariables(vars []*Variable) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.MockVariables = vars
 }
 
-// SetMockMemoryGraph sets the memory graph that will be returned by GetMemoryGraph
+// SetMockMemoryGraph sets the graph returned by GetMemoryGraph.
 func (m *MockClient) SetMockMemoryGraph(graph *MemoryGraph) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.MockMemoryGraph = graph
 }
 
-// GetBreakpoints returns all currently set breakpoints
+// GetBreakpoints returns a snapshot of all currently set breakpoints.
 func (m *MockClient) GetBreakpoints() []*Breakpoint {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -343,14 +350,14 @@ func (m *MockClient) GetBreakpoints() []*Breakpoint {
 	return bps
 }
 
-// IsConnected returns the connection state
+// IsConnected reports whether the client is connected.
 func (m *MockClient) IsConnected() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.connected
 }
 
-// GetStepNumber returns the current step count
+// GetStepNumber returns the number of execution steps taken since connection.
 func (m *MockClient) GetStepNumber() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

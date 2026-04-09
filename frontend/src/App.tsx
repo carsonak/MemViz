@@ -4,6 +4,11 @@ import { MemoryScene } from './components/MemoryScene';
 import { UI } from './components/UI';
 import { useMemoryStore } from './store/memoryStore';
 
+/**
+ * Root application component.
+ * Mounts the React Three Fiber canvas with the MemoryScene, overlays the UI HUD,
+ * and shows a connecting message until the WebSocket session is established.
+ */
 function App() {
   const isConnected = useMemoryStore((state) => state.isConnected);
 

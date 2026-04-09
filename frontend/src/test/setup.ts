@@ -1,3 +1,8 @@
+/**
+ * Vitest global test setup.
+ * Installs lightweight browser-API stubs (WebGL, ResizeObserver, rAF)
+ * required by Three.js and React Three Fiber in a jsdom environment.
+ */
 import "@testing-library/jest-dom";
 
 // Mock WebGL context for Three.js tests

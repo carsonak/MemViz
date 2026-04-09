@@ -5,19 +5,26 @@ import { useMemoryStore } from '../store/memoryStore';
 import { calculateFoldedPosition } from '../utils/memoryLayout';
 import type { MemoryBlock } from '../types';
 
-/** Maximum number of memory blocks to render with instancing */
+/** Maximum number of memory blocks rendered via GPU instancing. */
 const MAX_INSTANCES = 10000;
 
-/** Color palette for different memory types */
+/** Number of historical snapshots drawn behind the current state in Z depth. */
+const MAX_VISIBLE_HISTORY_STEPS = 20;
+
+/** World-space distance between consecutive historical layers on the Z axis. */
+const Z_STEP_UNIT = 2;
+
+/** Color palette keyed by memory kind or interaction state. */
 const COLORS = {
-  stack: new THREE.Color(0x4a9eff), // Blue for stack
-  heap: new THREE.Color(0xff6b6b),  // Red for heap
-  string: new THREE.Color(0x51cf66), // Green for strings
-  slice: new THREE.Color(0xfcc419),  // Yellow for slices
-  selected: new THREE.Color(0xffffff), // White for selected
-  hovered: new THREE.Color(0xbe4bdb), // Purple for hovered
+  stack: new THREE.Color(0x4a9eff),
+  heap: new THREE.Color(0xff6b6b),
+  string: new THREE.Color(0x51cf66),
+  slice: new THREE.Color(0xfcc419),
+  selected: new THREE.Color(0xffffff),
+  hovered: new THREE.Color(0xbe4bdb),
 };
 
+/** Per-instance GPU data computed each frame for a single memory block. */
 interface InstanceData {
   blockId: string;
   position: THREE.Vector3;
@@ -25,6 +32,13 @@ interface InstanceData {
   color: THREE.Color;
 }
 
+/**
+ * Renders the 3D memory visualisation using instanced meshes.
+ *
+ * Each memory block becomes a coloured cube positioned by its address via
+ * calculateFoldedPosition. Historical snapshots are layered behind the current
+ * state along the negative Z axis, fading with distance.
+ */
 export function MemoryScene() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -37,13 +51,11 @@ export function MemoryScene() {
   const setSelectedBlock = useMemoryStore((state) => state.setSelectedBlock);
   const setHoveredBlock = useMemoryStore((state) => state.setHoveredBlock);
 
-  // Calculate instance data for all blocks
   const instanceData = useMemo(() => {
     const data: InstanceData[] = [];
     const allBlocks = [...stackBlocks, ...heapBlocks];
     const currentStep = history.length;
 
-    // Current memory state (Z = 0)
     allBlocks.forEach((block) => {
       const pos = calculateFoldedPosition(block.address, block.is_stack);
       data.push({
@@ -58,10 +70,9 @@ export function MemoryScene() {
       });
     });
 
-    // Historical states (Z > 0, fading into the past)
-    history.slice(-20).forEach((graph, historyIndex) => {
-      const zOffset = (currentStep - graph.step_number) * 2; // Each step is 2 units back
-      const opacity = 1 - historyIndex / 20; // Fade older states
+    history.slice(-MAX_VISIBLE_HISTORY_STEPS).forEach((graph, historyIndex) => {
+      const zOffset = (currentStep - graph.step_number) * Z_STEP_UNIT;
+      const opacity = 1 - historyIndex / MAX_VISIBLE_HISTORY_STEPS;
 
       [...graph.stack_blocks, ...graph.heap_blocks].forEach((block) => {
         const pos = calculateFoldedPosition(block.address, block.is_stack);
@@ -84,7 +95,6 @@ export function MemoryScene() {
     return data.slice(0, MAX_INSTANCES);
   }, [stackBlocks, heapBlocks, history, selectedBlockId, hoveredBlockId]);
 
-  // Update instanced mesh matrices
   useEffect(() => {
     if (!meshRef.current) return;
 
@@ -110,17 +120,13 @@ export function MemoryScene() {
     mesh.count = instanceData.length;
   }, [instanceData, dummy]);
 
-  // Animate (optional subtle animations)
   useFrame((_state, _delta) => {
-    // Future: Add subtle pulsing or floating animation
   });
 
   return (
     <group>
-      {/* Grid helper for spatial reference */}
       <gridHelper args={[200, 50, 0x444444, 0x222222]} rotation={[Math.PI / 2, 0, 0]} />
 
-      {/* Instanced memory blocks */}
       <instancedMesh
         ref={meshRef}
         args={[undefined, undefined, MAX_INSTANCES]}
@@ -149,12 +155,16 @@ export function MemoryScene() {
         <meshStandardMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
-      {/* Axes helper */}
       <axesHelper args={[50]} />
     </group>
   );
 }
 
+/**
+ * Returns the display color for a memory block based on its type and interaction state.
+ *
+ * selectedId / hoveredId – IDs to match against for interaction highlights.
+ */
 function getBlockColor(
   block: MemoryBlock,
   selectedId: string | null,

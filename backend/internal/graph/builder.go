@@ -1,3 +1,5 @@
+// Package graph constructs a MemoryGraph from raw debugger variables.
+// It handles object graph traversal, cycle detection, and depth limiting.
 package graph
 
 import (
@@ -26,12 +28,10 @@ func NewBuilder(maxDepth int) *Builder {
 
 // BuildFromVariables traverses the object graph starting from the given variables.
 func (b *Builder) BuildFromVariables(vars []*debugger.Variable, stopState *debugger.StopState, stepNumber int) *debugger.MemoryGraph {
-	// First pass: process all variables and their children
 	for _, v := range vars {
 		b.processVariable(v, true, 0)
 	}
 
-	// Collect all blocks from the map
 	stackBlocks := make([]*debugger.MemoryBlock, 0)
 	heapBlocks := make([]*debugger.MemoryBlock, 0)
 
@@ -120,6 +120,7 @@ func (b *Builder) processVariable(v *debugger.Variable, isStack bool, depth int)
 	return block
 }
 
+// generateBlockID returns the canonical ID for a memory block.
 func generateBlockID(n int, isStack bool) string {
 	if isStack {
 		return "stack-" + itoa(n)
@@ -127,11 +128,13 @@ func generateBlockID(n int, isStack bool) string {
 	return "heap-" + itoa(n)
 }
 
+// generatePointerID returns the canonical ID for a pointer relationship.
 func generatePointerID(n int) string {
 	return "ptr-" + itoa(n)
 }
 
-// Simple int to string without fmt dependency
+// itoa converts a non-negative integer to its decimal string representation
+// without importing the fmt or strconv packages.
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

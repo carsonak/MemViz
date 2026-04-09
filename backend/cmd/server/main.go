@@ -1,3 +1,5 @@
+// Package main provides the MemViz server binary.
+// It starts the WebSocket server and handles graceful shutdown on interrupt.
 package main
 
 import (
@@ -17,7 +19,6 @@ func main() {
 
 	srv := server.New(*port)
 
-	// Graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 

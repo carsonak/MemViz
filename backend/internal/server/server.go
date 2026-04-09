@@ -1,3 +1,6 @@
+// Package server implements the MemViz WebSocket server.
+// It upgrades HTTP connections to WebSocket and dispatches incoming debugger
+// control messages to the active debugger.Client session.
 package server
 
 import (
@@ -48,7 +51,9 @@ type Server struct {
 	srv      *http.Server
 }
 
-// New creates a new MemViz server instance
+// New creates a Server listening on the given port.
+//
+// All WebSocket origins are accepted (permissive CORS) to support the Vite dev server.
 func New(port string) *Server {
 	return &Server{
 		port: port,
@@ -56,14 +61,16 @@ func New(port string) *Server {
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 			CheckOrigin: func(r *http.Request) bool {
-				// Allow connections from the frontend dev server
 				return true
 			},
 		},
 	}
 }
 
-// Start begins listening for WebSocket connections
+// Start registers HTTP routes and starts listening.
+//
+// /ws handles WebSocket debug sessions; /health returns a plain-text liveness probe.
+// Blocks until the server exits; returns http.ErrServerClosed on graceful shutdown.
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWebSocket)
@@ -77,7 +84,8 @@ func (s *Server) Start() error {
 	return s.srv.ListenAndServe()
 }
 
-// Shutdown gracefully stops the server
+// Shutdown gracefully drains active connections and stops the server.
+// It waits up to five seconds before forcibly closing.
 func (s *Server) Shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -87,11 +95,14 @@ func (s *Server) Shutdown() {
 	}
 }
 
+// handleHealth writes a plain-text "OK" liveness response.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
 
+// handleWebSocket upgrades the connection and drives the debug session message loop.
+// Each connection owns one debugger.Client that persists across messages until disconnect.
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -160,6 +171,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// execDebugAction dispatches a step/continue action to the active debugger client.
 func execDebugAction(client debugger.Client, action string) error {
 	ctx := context.Background()
 	var err error
@@ -176,6 +188,7 @@ func execDebugAction(client debugger.Client, action string) error {
 	return err
 }
 
+// sendJSON marshals msg and writes it as a WebSocket text frame.
 func sendJSON(conn *websocket.Conn, msg WSMessage) {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -187,6 +200,7 @@ func sendJSON(conn *websocket.Conn, msg WSMessage) {
 	}
 }
 
+// sendError sends an error message with the given request ID, human-readable message, and error code.
 func sendError(conn *websocket.Conn, requestID, message, code string) {
 	sendJSON(conn, WSMessage{
 		Type:      "error",
@@ -195,6 +209,7 @@ func sendError(conn *websocket.Conn, requestID, message, code string) {
 	})
 }
 
+// marshalPayload JSON-encodes v for use as a WSMessage payload, falling back to {} on error.
 func marshalPayload(v interface{}) json.RawMessage {
 	data, err := json.Marshal(v)
 	if err != nil {

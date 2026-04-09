@@ -1,5 +1,10 @@
 import { useMemoryStore } from '../store/memoryStore';
 
+/**
+ * HUD overlay rendered on top of the 3D canvas.
+ * Displays the current debugger stop location, the selected block's details,
+ * a colour legend, and camera control hints.
+ */
 export function UI() {
   const stopState = useMemoryStore((state) => state.stopState);
   const currentStep = useMemoryStore((state) => state.currentStepNumber);
@@ -25,7 +30,6 @@ export function UI() {
         userSelect: 'none',
       }}
     >
-      {/* Debugger state */}
       <div style={{ marginBottom: '1rem' }}>
         <div style={{ color: '#888' }}>Step: {currentStep}</div>
         {stopState && (
@@ -38,7 +42,6 @@ export function UI() {
         )}
       </div>
 
-      {/* Selected block info */}
       {selectedBlock && (
         <div
           style={{
@@ -68,7 +71,6 @@ export function UI() {
         </div>
       )}
 
-      {/* Legend */}
       <div
         style={{
           position: 'fixed',
@@ -85,7 +87,6 @@ export function UI() {
         <LegendItem color="#fcc419" label="Slice" />
       </div>
 
-      {/* Controls hint */}
       <div
         style={{
           position: 'fixed',
@@ -104,6 +105,7 @@ export function UI() {
   );
 }
 
+/** A single colour swatch and label used in the scene legend. */
 function LegendItem({ color, label }: { color: string; label: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>

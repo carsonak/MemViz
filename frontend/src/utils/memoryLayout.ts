@@ -46,20 +46,11 @@ export function calculateFoldedPosition(
   address: number,
   isStack: boolean,
 ): Position2D {
-  // Normalize address relative to region base
   const baseAddr = isStack ? STACK_BASE : HEAP_BASE;
   const offset = Math.abs(address - baseAddr);
-
-  // Apply logarithmic folding to compress large address ranges
-  // This keeps the visualization navigable even with huge address gaps
   const foldedOffset = foldAddress(offset);
-
-  // Convert to 2D coordinates using a simple grid mapping
-  // Stack goes to positive Y, heap goes to negative Y
   const gridX = (foldedOffset % MAX_GRID_DIM) * GRID_CELL_SIZE;
   const gridY = Math.floor(foldedOffset / MAX_GRID_DIM) * GRID_CELL_SIZE;
-
-  // Offset stack and heap to different regions
   const yOffset = isStack ? 50 : -50;
 
   return {
@@ -69,19 +60,17 @@ export function calculateFoldedPosition(
 }
 
 /**
- * Applies logarithmic folding to compress large address ranges.
+ * Applies logarithmic folding to compress large address ranges into a compact grid index.
  *
- * This ensures that addresses like 0x1000 and 0x100000000 don't result
- * in a visualization that's impossibly spread out.
+ * Formula: `floor(log2(offset / FOLD_FACTOR + 1) × 10)` – maps addresses
+ * to navigable grid positions while preserving relative ordering.
  *
- * @param offset - The address offset from region base
- * @returns A folded value suitable for grid positioning
+ * @param offset - The raw address offset from the region base address.
+ * @returns A folded grid index.
  */
 export function foldAddress(offset: number): number {
   if (offset === 0) return 0;
 
-  // Use logarithmic scaling with a base that provides good visual spread
-  // The formula: log2(offset / FOLD_FACTOR + 1) * scaling_factor
   const normalized = offset / FOLD_FACTOR;
   const folded = Math.log2(normalized + 1) * 10;
 
@@ -89,30 +78,35 @@ export function foldAddress(offset: number): number {
 }
 
 /**
- * Calculates the visual scale for a memory block based on its size.
+ * Calculates the visual scale for a memory block based on its size in bytes.
  *
- * @param size - The size of the memory block in bytes
- * @returns A scale factor for the block's visual representation
+ * Uses logarithmic scaling so that small primitives (8 bytes) and large
+ * heap objects (megabytes) are both reasonably visible.
+ *
+ * @param size - The size of the memory block in bytes.
+ * @returns A scale factor for the block's visual representation.
  */
 export function calculateBlockScale(size: number): number {
-  // Use logarithmic scaling so that 8-byte ints and 1MB slices
-  // are both reasonably visible
   return Math.max(0.5, Math.log2(size + 1) * 0.5);
 }
 
 /**
- * Determines the Level of Detail (LOD) tier based on camera distance.
+ * Returns the Level of Detail tier for a given camera distance.
  *
- * Used for semantic zoom - hiding text labels when zoomed out.
+ * Tiers control how much text is rendered on memory blocks:
+ * - 0 (< 20): full detail – name, type, and value labels.
+ * - 1 (< 50): name labels only.
+ * - 2 (< 100): no text labels.
+ * - 3 (>= 100): simplified geometry, no text.
  *
- * @param distance - Camera distance from origin
- * @returns LOD tier (0 = closest, 3 = farthest)
+ * @param distance - Camera distance from the world origin.
+ * @returns LOD tier number (0 = closest/most detailed, 3 = farthest/simplest).
  */
 export function getLODTier(distance: number): number {
-  if (distance < 20) return 0; // Full detail: names, types, values
-  if (distance < 50) return 1; // Medium: names only
-  if (distance < 100) return 2; // Low: no text
-  return 3; // Very low: simplified geometry
+  if (distance < 20) return 0;
+  if (distance < 50) return 1;
+  if (distance < 100) return 2;
+  return 3;
 }
 
 /**

@@ -1,3 +1,6 @@
+// Package debugger defines the Client interface and shared types for interacting
+// with a Go debugger (Delve). Concrete implementations live in separate files:
+// MockClient for testing and DelveClient for production use.
 package debugger
 
 import (

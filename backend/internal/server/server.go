@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/memviz/backend/internal/debugger"
+	"github.com/memviz/backend/internal/graph"
 )
 
 // WSMessage represents a WebSocket message exchanged with the frontend
@@ -115,6 +116,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	var client debugger.Client
 
+	defer func() {
+		if client != nil {
+			_ = client.Disconnect()
+		}
+	}()
+
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
@@ -134,15 +141,36 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		switch msg.Type {
 		case "launch":
-			client = debugger.NewMockClient()
-			if err := client.LaunchProgram(context.Background(), ""); err != nil {
+			var payload LaunchPayload
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				sendError(conn, msg.RequestID, "invalid payload for launch", "parse_error")
+				continue
+			}
+
+			if payload.ProgramPath == "" {
+				sendError(conn, msg.RequestID, "program path cannot be empty", "invalid_input")
+				continue
+			}
+
+			// Instantiate the real Delve Client
+			delveClient := debugger.NewDelveClient()
+
+			// Inject the graph builder to resolve the cyclic dependency
+			delveClient.BuildGraphFunc = func(vars []*debugger.Variable, ss *debugger.StopState, step int) *debugger.MemoryGraph {
+				// We set a max pointer depth of 5 to prevent runaway traversal
+				return graph.NewBuilder(5).BuildFromVariables(vars, ss, step)
+			}
+
+			client = delveClient
+
+			if err := client.LaunchProgram(context.Background(), payload.ProgramPath); err != nil {
 				sendError(conn, msg.RequestID, err.Error(), "launch_error")
 				continue
 			}
 			sendJSON(conn, WSMessage{
 				Type:      "status",
 				RequestID: msg.RequestID,
-				Payload:   marshalPayload(StatusPayload{Connected: true, Debugging: true}),
+				Payload:   marshalPayload(StatusPayload{Connected: true, Debugging: true, Program: payload.ProgramPath}),
 			})
 
 		case "step_over", "step_into", "step_out", "continue":
@@ -154,7 +182,8 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				sendError(conn, msg.RequestID, err.Error(), "debug_error")
 				continue
 			}
-			graph, err := client.GetMemoryGraph(context.Background(), 3)
+			// Extract the real memory graph
+			graph, err := client.GetMemoryGraph(context.Background(), 5)
 			if err != nil {
 				sendError(conn, msg.RequestID, err.Error(), "graph_error")
 				continue

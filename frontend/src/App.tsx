@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { MemoryScene } from './components/MemoryScene';
@@ -11,6 +12,13 @@ import { useMemoryStore } from './store/memoryStore';
  */
 function App() {
   const isConnected = useMemoryStore((state) => state.isConnected);
+  const connect = useMemoryStore((state) => state.connect);
+  const disconnect = useMemoryStore((state) => state.disconnect);
+
+  useEffect(() => {
+    connect();
+    return () => disconnect();
+  }, [connect, disconnect]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>

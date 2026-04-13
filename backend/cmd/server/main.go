@@ -17,6 +17,9 @@ func main() {
 	port := flag.String("port", "8080", "WebSocket server port")
 	flag.Parse()
 
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+	log.SetPrefix("[MemViz] ")
+
 	srv := server.New(*port)
 
 	stop := make(chan os.Signal, 1)

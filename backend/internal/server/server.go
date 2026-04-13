@@ -97,7 +97,8 @@ func (s *Server) Shutdown() {
 }
 
 // handleHealth writes a plain-text "OK" liveness response.
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Health check from %s", r.RemoteAddr)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("OK"))
 }
@@ -107,16 +108,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
+		log.Printf("WebSocket upgrade error from %s: %v", r.RemoteAddr, err)
 		return
 	}
 	defer func() { _ = conn.Close() }()
 
-	log.Println("Client connected")
+	log.Printf("Client connected: %s", r.RemoteAddr)
 
 	var client debugger.Client
 
 	defer func() {
+		log.Printf("Client disconnected: %s", r.RemoteAddr)
 		if client != nil {
 			_ = client.Disconnect()
 		}
@@ -126,28 +128,31 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				log.Printf("WebSocket error from %s: %v", r.RemoteAddr, err)
 			}
 			break
 		}
 
-		log.Printf("Received: %s", message)
-
 		var msg WSMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("Parse error from %s: %v", r.RemoteAddr, err)
 			sendError(conn, "", "invalid message format", "parse_error")
 			continue
 		}
+
+		log.Printf("Request  [%s] type=%q id=%q from %s", r.RemoteAddr, msg.Type, msg.RequestID, r.RemoteAddr)
 
 		switch msg.Type {
 		case "launch":
 			var payload LaunchPayload
 			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				log.Printf("Error [%s] id=%q parse launch payload: %v", r.RemoteAddr, msg.RequestID, err)
 				sendError(conn, msg.RequestID, "invalid payload for launch", "parse_error")
 				continue
 			}
 
 			if payload.ProgramPath == "" {
+				log.Printf("Error [%s] id=%q launch: program path empty", r.RemoteAddr, msg.RequestID)
 				sendError(conn, msg.RequestID, "program path cannot be empty", "invalid_input")
 				continue
 			}
@@ -163,10 +168,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 			client = delveClient
 
+			log.Printf("Launching program %q for %s (id=%q)", payload.ProgramPath, r.RemoteAddr, msg.RequestID)
 			if err := client.LaunchProgram(context.Background(), payload.ProgramPath); err != nil {
+				log.Printf("Error [%s] id=%q launch %q: %v", r.RemoteAddr, msg.RequestID, payload.ProgramPath, err)
 				sendError(conn, msg.RequestID, err.Error(), "launch_error")
 				continue
 			}
+			log.Printf("Response [%s] id=%q type=status program=%q", r.RemoteAddr, msg.RequestID, payload.ProgramPath)
 			sendJSON(conn, WSMessage{
 				Type:      "status",
 				RequestID: msg.RequestID,
@@ -175,19 +183,24 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		case "step_over", "step_into", "step_out", "continue":
 			if client == nil {
+				log.Printf("Error [%s] id=%q %s: no active debug session", r.RemoteAddr, msg.RequestID, msg.Type)
 				sendError(conn, msg.RequestID, "no active debug session", "no_session")
 				continue
 			}
+			log.Printf("Executing %s for %s (id=%q)", msg.Type, r.RemoteAddr, msg.RequestID)
 			if err := execDebugAction(client, msg.Type); err != nil {
+				log.Printf("Error [%s] id=%q %s: %v", r.RemoteAddr, msg.RequestID, msg.Type, err)
 				sendError(conn, msg.RequestID, err.Error(), "debug_error")
 				continue
 			}
 			// Extract the real memory graph
 			graph, err := client.GetMemoryGraph(context.Background(), 5)
 			if err != nil {
+				log.Printf("Error [%s] id=%q get memory graph: %v", r.RemoteAddr, msg.RequestID, err)
 				sendError(conn, msg.RequestID, err.Error(), "graph_error")
 				continue
 			}
+			log.Printf("Response [%s] id=%q type=memory_update", r.RemoteAddr, msg.RequestID)
 			sendJSON(conn, WSMessage{
 				Type:      "memory_update",
 				RequestID: msg.RequestID,
@@ -195,6 +208,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			})
 
 		default:
+			log.Printf("Error [%s] id=%q unknown message type %q", r.RemoteAddr, msg.RequestID, msg.Type)
 			sendError(conn, msg.RequestID, "unknown message type: "+msg.Type, "unknown_type")
 		}
 	}

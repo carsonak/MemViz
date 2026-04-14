@@ -239,9 +239,45 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 	case "start":
 		log.Printf("Received command: %s", cmd.Action)
 	case "step":
-		log.Printf("Received command: %s", cmd.Action)
+		if sess.client == nil {
+			sendError(conn, "", "no active debug session", "no_session")
+			return
+		}
+		if err := execDebugAction(sess.client, "step_over"); err != nil {
+			log.Printf("step failed: %v", err)
+			sendError(conn, "", err.Error(), "debug_error")
+			return
+		}
+		g, err := sess.client.GetMemoryGraph(context.Background(), 5)
+		if err != nil {
+			log.Printf("get memory graph after step failed: %v", err)
+			sendError(conn, "", err.Error(), "graph_error")
+			return
+		}
+		sendJSON(conn, WSMessage{
+			Type:    "memory_update",
+			Payload: marshalPayload(MemoryUpdatePayload{Graph: g}),
+		})
 	case "continue":
-		log.Printf("Received command: %s", cmd.Action)
+		if sess.client == nil {
+			sendError(conn, "", "no active debug session", "no_session")
+			return
+		}
+		if err := execDebugAction(sess.client, "continue"); err != nil {
+			log.Printf("continue failed: %v", err)
+			sendError(conn, "", err.Error(), "debug_error")
+			return
+		}
+		g, err := sess.client.GetMemoryGraph(context.Background(), 5)
+		if err != nil {
+			log.Printf("get memory graph after continue failed: %v", err)
+			sendError(conn, "", err.Error(), "graph_error")
+			return
+		}
+		sendJSON(conn, WSMessage{
+			Type:    "memory_update",
+			Payload: marshalPayload(MemoryUpdatePayload{Graph: g}),
+		})
 	case "stop":
 		log.Printf("Received command: %s", cmd.Action)
 	case "build_and_start":

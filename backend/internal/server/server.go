@@ -6,8 +6,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -43,6 +47,12 @@ type StatusPayload struct {
 type ErrorPayload struct {
 	Message string `json:"message"`
 	Code    string `json:"code,omitempty"`
+}
+
+// session holds mutable per-connection state shared between message handlers.
+type session struct {
+	client           debugger.Client
+	currentBinaryPath string
 }
 
 // Server represents the MemViz WebSocket server
@@ -115,12 +125,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Client connected: %s", r.RemoteAddr)
 
-	var client debugger.Client
+	sess := &session{}
 
 	defer func() {
 		log.Printf("Client disconnected: %s", r.RemoteAddr)
-		if client != nil {
-			_ = client.Disconnect()
+		if sess.client != nil {
+			_ = sess.client.Disconnect()
 		}
 	}()
 
@@ -137,7 +147,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		var cmd ClientCommand
 		if err := json.Unmarshal(message, &cmd); err == nil && cmd.Action != "" {
 			log.Printf("Command  [%s] action=%q from %s", r.RemoteAddr, cmd.Action, r.RemoteAddr)
-			s.handleCommand(conn, cmd)
+			s.handleCommand(conn, cmd, sess)
 			continue
 		}
 
@@ -175,10 +185,10 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				return graph.NewBuilder(5).BuildFromVariables(vars, ss, step)
 			}
 
-			client = delveClient
+			sess.client = delveClient
 
 			log.Printf("Launching program %q for %s (id=%q)", payload.ProgramPath, r.RemoteAddr, msg.RequestID)
-			if err := client.LaunchProgram(context.Background(), payload.ProgramPath); err != nil {
+			if err := sess.client.LaunchProgram(context.Background(), payload.ProgramPath); err != nil {
 				log.Printf("Error [%s] id=%q launch %q: %v", r.RemoteAddr, msg.RequestID, payload.ProgramPath, err)
 				sendError(conn, msg.RequestID, err.Error(), "launch_error")
 				continue
@@ -191,19 +201,19 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			})
 
 		case "step_over", "step_into", "step_out", "continue":
-			if client == nil {
+			if sess.client == nil {
 				log.Printf("Error [%s] id=%q %s: no active debug session", r.RemoteAddr, msg.RequestID, msg.Type)
 				sendError(conn, msg.RequestID, "no active debug session", "no_session")
 				continue
 			}
 			log.Printf("Executing %s for %s (id=%q)", msg.Type, r.RemoteAddr, msg.RequestID)
-			if err := execDebugAction(client, msg.Type); err != nil {
+			if err := execDebugAction(sess.client, msg.Type); err != nil {
 				log.Printf("Error [%s] id=%q %s: %v", r.RemoteAddr, msg.RequestID, msg.Type, err)
 				sendError(conn, msg.RequestID, err.Error(), "debug_error")
 				continue
 			}
 			// Extract the real memory graph
-			graph, err := client.GetMemoryGraph(context.Background(), 5)
+			graph, err := sess.client.GetMemoryGraph(context.Background(), 5)
 			if err != nil {
 				log.Printf("Error [%s] id=%q get memory graph: %v", r.RemoteAddr, msg.RequestID, err)
 				sendError(conn, msg.RequestID, err.Error(), "graph_error")
@@ -224,7 +234,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCommand processes a ClientCommand received over the WebSocket.
-func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand) {
+func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *session) {
 	switch cmd.Action {
 	case "start":
 		log.Printf("Received command: %s", cmd.Action)
@@ -235,9 +245,55 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand) {
 	case "stop":
 		log.Printf("Received command: %s", cmd.Action)
 	case "build_and_start":
-		log.Printf("Received command: %s", cmd.Action)
+		var bp BuildPayload
+		if err := json.Unmarshal(cmd.Payload, &bp); err != nil {
+			log.Printf("Error parsing build payload: %v", err)
+			sendError(conn, "", "invalid build payload", "parse_error")
+			return
+		}
+		if bp.Code == "" {
+			sendError(conn, "", "code cannot be empty", "invalid_input")
+			return
+		}
+
+		binPath, err := buildCode(bp.Code)
+		if err != nil {
+			log.Printf("Build failed: %v", err)
+			sendError(conn, "", err.Error(), "build_error")
+			return
+		}
+		sess.currentBinaryPath = binPath
+
+		if err := launchDebugSession(sess, binPath); err != nil {
+			log.Printf("Launch failed: %v", err)
+			sendError(conn, "", err.Error(), "launch_error")
+			return
+		}
+
+		log.Printf("build_and_start: binary=%s", binPath)
+		sendJSON(conn, WSMessage{
+			Type:    "status",
+			Payload: marshalPayload(StatusPayload{Connected: true, Debugging: true, Program: binPath}),
+		})
+
 	case "restart":
-		log.Printf("Received command: %s", cmd.Action)
+		if sess.currentBinaryPath == "" {
+			sendError(conn, "", "no previously built binary; send build_and_start first", "no_binary")
+			return
+		}
+
+		if err := launchDebugSession(sess, sess.currentBinaryPath); err != nil {
+			log.Printf("Restart launch failed: %v", err)
+			sendError(conn, "", err.Error(), "launch_error")
+			return
+		}
+
+		log.Printf("restart: binary=%s", sess.currentBinaryPath)
+		sendJSON(conn, WSMessage{
+			Type:    "status",
+			Payload: marshalPayload(StatusPayload{Connected: true, Debugging: true, Program: sess.currentBinaryPath}),
+		})
+
 	case "add_breakpoint":
 		var bp BreakpointPayload
 		if err := json.Unmarshal(cmd.Payload, &bp); err != nil {
@@ -298,4 +354,45 @@ func marshalPayload(v interface{}) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return data
+}
+
+// buildCode writes Go source to a temp directory and compiles it with
+// optimisation-defeating flags required by Delve. Returns the path to the
+// resulting binary or an error containing the compiler output.
+func buildCode(code string) (string, error) {
+	dir, err := os.MkdirTemp("", "memviz-build-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
+
+	srcPath := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(srcPath, []byte(code), 0o600); err != nil {
+		return "", fmt.Errorf("failed to write source: %w", err)
+	}
+
+	binPath := filepath.Join(dir, "debug_bin")
+	cmd := exec.Command("go", "build", `-gcflags=all=-N -l`, "-o", binPath, srcPath)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("build failed:\n%s", string(output))
+	}
+
+	return binPath, nil
+}
+
+// launchDebugSession disconnects any existing client, creates a fresh Delve
+// client, and launches the binary at binPath under the debugger.
+func launchDebugSession(sess *session, binPath string) error {
+	if sess.client != nil {
+		_ = sess.client.Disconnect()
+	}
+
+	delveClient := debugger.NewDelveClient()
+	delveClient.BuildGraphFunc = func(vars []*debugger.Variable, ss *debugger.StopState, step int) *debugger.MemoryGraph {
+		return graph.NewBuilder(5).BuildFromVariables(vars, ss, step)
+	}
+	sess.client = delveClient
+
+	return sess.client.LaunchProgram(context.Background(), binPath)
 }

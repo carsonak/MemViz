@@ -68,13 +68,30 @@ func TestHandleCommand_WebSocket(t *testing.T) {
 		`{"action":"continue"}`,
 		`{"action":"stop"}`,
 		`{"action":"add_breakpoint","payload":{"file":"main.go","line":10}}`,
-		`{"action":"restart"}`,
 	}
 
 	for _, cmd := range commands {
 		err := conn.WriteMessage(websocket.TextMessage, []byte(cmd))
 		require.NoError(t, err, "failed to send: %s", cmd)
 	}
+
+	// restart without a prior build should return error.
+	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"action":"restart"}`))
+	require.NoError(t, err)
+
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, restartMsg, err := conn.ReadMessage()
+	require.NoError(t, err)
+
+	var restartResp WSMessage
+	err = json.Unmarshal(restartMsg, &restartResp)
+	require.NoError(t, err)
+	assert.Equal(t, "error", restartResp.Type)
+
+	var restartErr ErrorPayload
+	err = json.Unmarshal(restartResp.Payload, &restartErr)
+	require.NoError(t, err)
+	assert.Equal(t, "no_binary", restartErr.Code)
 
 	// Send an unknown action — the server should reply with an error message.
 	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"action":"fly"}`))
@@ -122,4 +139,67 @@ func TestBuildPayload_EmptyCode(t *testing.T) {
 	err = json.Unmarshal(cmd.Payload, &bp)
 	require.NoError(t, err)
 	assert.Empty(t, bp.Code)
+}
+
+func TestHandleCommand_BuildAndStartEmptyCode(t *testing.T) {
+	srv := New("0")
+
+	server := httptest.NewServer(http.HandlerFunc(srv.handleWebSocket))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
+
+	conn, _, err := dialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"action":"build_and_start","payload":{"code":""}}`))
+	require.NoError(t, err)
+
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, msg, err := conn.ReadMessage()
+	require.NoError(t, err)
+
+	var resp WSMessage
+	err = json.Unmarshal(msg, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "error", resp.Type)
+
+	var errPayload ErrorPayload
+	err = json.Unmarshal(resp.Payload, &errPayload)
+	require.NoError(t, err)
+	assert.Equal(t, "invalid_input", errPayload.Code)
+}
+
+func TestHandleCommand_BuildAndStartBadCode(t *testing.T) {
+	srv := New("0")
+
+	server := httptest.NewServer(http.HandlerFunc(srv.handleWebSocket))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
+
+	conn, _, err := dialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"action":"build_and_start","payload":{"code":"this is not valid go"}}`))
+	require.NoError(t, err)
+
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, msg, err := conn.ReadMessage()
+	require.NoError(t, err)
+
+	var resp WSMessage
+	err = json.Unmarshal(msg, &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "error", resp.Type)
+
+	var errPayload ErrorPayload
+	err = json.Unmarshal(resp.Payload, &errPayload)
+	require.NoError(t, err)
+	assert.Equal(t, "build_error", errPayload.Code)
+	assert.Contains(t, errPayload.Message, "build failed")
 }

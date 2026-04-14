@@ -373,4 +373,27 @@ describe("memoryStore", () => {
       expect(mockWs.sentMessages).toHaveLength(0);
     });
   });
+
+  describe("React Strict Mode", () => {
+    it("handles React Strict Mode double-mounting correctly", () => {
+      // 1. First mount: connect
+      useMemoryStore.getState().connect("ws://localhost:8080/ws");
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      // 2. Strict Mode unmount: disconnect immediately
+      useMemoryStore.getState().disconnect();
+
+      // 3. ws must be cleared to null
+      expect(useMemoryStore.getState().ws).toBeNull();
+
+      // 4. Strict Mode remount: connect again
+      useMemoryStore.getState().connect("ws://localhost:8080/ws");
+
+      // 5. A new WebSocket instance should exist in the store
+      const ws = useMemoryStore.getState().ws;
+      expect(ws).not.toBeNull();
+      expect(ws).toBeInstanceOf(MockWebSocket);
+      expect(MockWebSocket.instances).toHaveLength(2);
+    });
+  });
 });

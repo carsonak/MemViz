@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useMemoryStore } from '../store/memoryStore';
 import { calculateFoldedPosition } from '../utils/memoryLayout';
+import { PointerLines } from './PointerLines';
 import type { MemoryBlock } from '../types';
 
 /** Maximum number of memory blocks rendered via GPU instancing. */
@@ -155,6 +156,7 @@ export function MemoryScene() {
         <meshStandardMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
+      <PointerLines />
       <axesHelper args={[50]} />
     </group>
   );

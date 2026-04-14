@@ -133,6 +133,15 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
+		// Try ClientCommand format (has "action" field) first.
+		var cmd ClientCommand
+		if err := json.Unmarshal(message, &cmd); err == nil && cmd.Action != "" {
+			log.Printf("Command  [%s] action=%q from %s", r.RemoteAddr, cmd.Action, r.RemoteAddr)
+			s.handleCommand(conn, cmd)
+			continue
+		}
+
+		// Fall back to WSMessage format (has "type" field).
 		var msg WSMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
 			log.Printf("Parse error from %s: %v", r.RemoteAddr, err)
@@ -212,6 +221,11 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			sendError(conn, msg.RequestID, "unknown message type: "+msg.Type, "unknown_type")
 		}
 	}
+}
+
+// handleCommand processes a ClientCommand received over the WebSocket.
+func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand) {
+	log.Printf("Received command: %s", cmd.Action)
 }
 
 // execDebugAction dispatches a step/continue action to the active debugger client.

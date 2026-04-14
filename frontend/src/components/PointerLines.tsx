@@ -5,7 +5,7 @@ import { calculateFoldedPosition } from '../utils/memoryLayout';
 import type { MemoryBlock, Pointer } from '../types';
 
 /** Accent colour for pointer lines. */
-const LINE_COLOR = '#ff0066';
+const LINE_COLOR = '#fcc419';
 
 /** Peak height of the bezier arc so lines float above blocks. */
 const ARC_HEIGHT = 4;

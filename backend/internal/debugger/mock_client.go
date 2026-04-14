@@ -159,6 +159,24 @@ func (m *MockClient) StepOut(_ context.Context) (*StopState, error) {
 	return m.step(StopReasonStep)
 }
 
+// Halt returns a StopState as if the program was interrupted.
+func (m *MockClient) Halt(_ context.Context) (*StopState, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.connected {
+		return nil, ErrNotConnected
+	}
+
+	return &StopState{
+		Reason:      StopReasonBreakpoint,
+		File:        "main.go",
+		Line:        1,
+		Function:    "main.main",
+		GoroutineID: 1,
+	}, nil
+}
+
 // step advances the step counter and returns a StopState with the given reason.
 func (m *MockClient) step(reason StopReason) (*StopState, error) {
 	m.mu.Lock()

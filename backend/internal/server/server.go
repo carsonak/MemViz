@@ -278,8 +278,66 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 			Type:    "memory_update",
 			Payload: marshalPayload(MemoryUpdatePayload{Graph: g}),
 		})
+	case "step_into":
+		if sess.client == nil {
+			sendError(conn, "", "no active debug session", "no_session")
+			return
+		}
+		if err := execDebugAction(sess.client, "step_into"); err != nil {
+			log.Printf("step_into failed: %v", err)
+			sendError(conn, "", err.Error(), "debug_error")
+			return
+		}
+		g, err := sess.client.GetMemoryGraph(context.Background(), 5)
+		if err != nil {
+			log.Printf("get memory graph after step_into failed: %v", err)
+			sendError(conn, "", err.Error(), "graph_error")
+			return
+		}
+		sendJSON(conn, WSMessage{
+			Type:    "memory_update",
+			Payload: marshalPayload(MemoryUpdatePayload{Graph: g}),
+		})
+	case "step_out":
+		if sess.client == nil {
+			sendError(conn, "", "no active debug session", "no_session")
+			return
+		}
+		if err := execDebugAction(sess.client, "step_out"); err != nil {
+			log.Printf("step_out failed: %v", err)
+			sendError(conn, "", err.Error(), "debug_error")
+			return
+		}
+		g, err := sess.client.GetMemoryGraph(context.Background(), 5)
+		if err != nil {
+			log.Printf("get memory graph after step_out failed: %v", err)
+			sendError(conn, "", err.Error(), "graph_error")
+			return
+		}
+		sendJSON(conn, WSMessage{
+			Type:    "memory_update",
+			Payload: marshalPayload(MemoryUpdatePayload{Graph: g}),
+		})
 	case "stop":
-		log.Printf("Received command: %s", cmd.Action)
+		if sess.client == nil {
+			sendError(conn, "", "no active debug session", "no_session")
+			return
+		}
+		if err := execDebugAction(sess.client, "halt"); err != nil {
+			log.Printf("halt failed: %v", err)
+			sendError(conn, "", err.Error(), "debug_error")
+			return
+		}
+		g, err := sess.client.GetMemoryGraph(context.Background(), 5)
+		if err != nil {
+			log.Printf("get memory graph after halt failed: %v", err)
+			sendError(conn, "", err.Error(), "graph_error")
+			return
+		}
+		sendJSON(conn, WSMessage{
+			Type:    "memory_update",
+			Payload: marshalPayload(MemoryUpdatePayload{Graph: g}),
+		})
 	case "build_and_start":
 		var bp BuildPayload
 		if err := json.Unmarshal(cmd.Payload, &bp); err != nil {
@@ -391,6 +449,8 @@ func execDebugAction(client debugger.Client, action string) error {
 		_, err = client.StepOut(ctx)
 	case "continue":
 		_, err = client.Continue(ctx)
+	case "halt":
+		_, err = client.Halt(ctx)
 	}
 	return err
 }

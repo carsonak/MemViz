@@ -418,6 +418,11 @@ func (d *DelveClient) StepOut(_ context.Context) (*StopState, error) {
 	return d.execCommand("stepOut")
 }
 
+// Halt interrupts a running program.
+func (d *DelveClient) Halt(_ context.Context) (*StopState, error) {
+	return d.execCommand("halt")
+}
+
 // execCommand sends a debugger command via RPC and translates the response.
 func (d *DelveClient) execCommand(name string) (*StopState, error) {
 	client, err := d.rpc()

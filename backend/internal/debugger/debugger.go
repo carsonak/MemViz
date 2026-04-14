@@ -38,6 +38,9 @@ type Client interface {
 	// StepOut continues until the current function returns
 	StepOut(ctx context.Context) (*StopState, error)
 
+	// Halt interrupts a running program and returns the current stop state
+	Halt(ctx context.Context) (*StopState, error)
+
 	// GetLocalVariables retrieves all local variables in the current scope
 	GetLocalVariables(ctx context.Context) ([]*Variable, error)
 

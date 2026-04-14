@@ -61,7 +61,9 @@ func TestHandleCommand_WebSocket(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 
-	// Send simple commands that should be processed without error.
+	// Send simple commands; step/continue/stop/add_breakpoint will return
+	// "no_session" errors because there is no active debugger. "start" is a no-op
+	// that produces no response.
 	commands := []string{
 		`{"action":"start"}`,
 		`{"action":"step"}`,
@@ -73,6 +75,14 @@ func TestHandleCommand_WebSocket(t *testing.T) {
 	for _, cmd := range commands {
 		err := conn.WriteMessage(websocket.TextMessage, []byte(cmd))
 		require.NoError(t, err, "failed to send: %s", cmd)
+	}
+
+	// Drain the error replies from step, continue, stop, and add_breakpoint
+	// (4 commands that now validate the session).
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	for i := 0; i < 4; i++ {
+		_, _, err := conn.ReadMessage()
+		require.NoError(t, err, "failed to drain error response %d", i)
 	}
 
 	// restart without a prior build should return error.

@@ -104,7 +104,6 @@ export function UI() {
         <div>Scroll to zoom</div>
       </div>
 
-      <DebuggerControls sendCommand={sendCommand} disabled={!isConnected} />
     </div>
   );
 }
@@ -145,7 +144,7 @@ const controlButtonDisabledStyle: React.CSSProperties = {
 };
 
 /** Debugger control buttons wired to sendCommand. */
-function DebuggerControls({
+export function DebuggerControls({
   sendCommand,
   disabled,
 }: {
@@ -162,12 +161,10 @@ function DebuggerControls({
   return (
     <div
       style={{
-        position: 'fixed',
-        top: '1rem',
-        right: '1rem',
         display: 'flex',
         gap: '0.5rem',
-        pointerEvents: 'auto',
+        padding: '0.5rem',
+        justifyContent: 'center',
       }}
     >
       {actions.map(({ label, action }) => (

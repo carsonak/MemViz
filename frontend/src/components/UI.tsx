@@ -2,8 +2,8 @@ import { useMemoryStore } from '../store/memoryStore';
 
 /**
  * HUD overlay rendered on top of the 3D canvas.
- * Displays the current debugger stop location, the selected block's details,
- * a colour legend, and camera control hints.
+ * Displays the selected block's details, a colour legend,
+ * and camera control hints. All positioned relative to the 3D pane.
  */
 export function UI() {
   const stopState = useMemoryStore((state) => state.stopState);
@@ -11,76 +11,90 @@ export function UI() {
   const selectedBlockId = useMemoryStore((state) => state.selectedBlockId);
   const stackBlocks = useMemoryStore((state) => state.stackBlocks);
   const heapBlocks = useMemoryStore((state) => state.heapBlocks);
-  const sendCommand = useMemoryStore((state) => state.sendCommand);
-  const isConnected = useMemoryStore((state) => state.isConnected);
 
   const selectedBlock = [...stackBlocks, ...heapBlocks].find(
     (b) => b.id === selectedBlockId
   );
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        padding: '1rem',
-        color: '#e0e0e0',
-        fontFamily: 'monospace',
-        fontSize: '0.85rem',
-        pointerEvents: 'none',
-        userSelect: 'none',
-      }}
-    >
-      <div style={{ marginBottom: '1rem' }}>
-        <div style={{ color: '#888' }}>Step: {currentStep}</div>
-        {stopState && (
-          <>
-            <div>
+    <>
+      {/* Step / stop state — compact top-left badge */}
+      {(currentStep > 0 || stopState) && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '0.5rem',
+            left: '0.5rem',
+            background: 'rgba(0, 0, 0, 0.7)',
+            padding: '0.35rem 0.6rem',
+            borderRadius: '4px',
+            border: '1px solid #333',
+            color: '#e0e0e0',
+            fontFamily: 'monospace',
+            fontSize: '0.75rem',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        >
+          <span style={{ color: '#888' }}>Step {currentStep}</span>
+          {stopState && (
+            <span style={{ marginLeft: '0.5rem', color: '#4a9eff' }}>
               {stopState.file}:{stopState.line}
-            </div>
-            <div style={{ color: '#4a9eff' }}>{stopState.function}</div>
-          </>
-        )}
-      </div>
+            </span>
+          )}
+        </div>
+      )}
 
+      {/* Selected block details */}
       {selectedBlock && (
         <div
           style={{
+            position: 'absolute',
+            top: '2.5rem',
+            left: '0.5rem',
             background: 'rgba(0, 0, 0, 0.8)',
             padding: '0.75rem',
             borderRadius: '4px',
             border: '1px solid #333',
-            maxWidth: '300px',
+            maxWidth: '280px',
+            color: '#e0e0e0',
+            fontFamily: 'monospace',
+            fontSize: '0.8rem',
+            pointerEvents: 'none',
+            userSelect: 'none',
           }}
         >
-          <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+          <div style={{ color: '#fff', fontWeight: 'bold', marginBottom: '0.3rem' }}>
             {selectedBlock.name}
           </div>
           <div style={{ color: '#4a9eff' }}>{selectedBlock.type}</div>
           <div style={{ color: '#888' }}>
-            Address: 0x{selectedBlock.address.toString(16).toUpperCase()}
+            0x{selectedBlock.address.toString(16).toUpperCase()} &middot; {selectedBlock.size}B
           </div>
-          <div style={{ color: '#888' }}>Size: {selectedBlock.size} bytes</div>
           {selectedBlock.value && (
-            <div style={{ color: '#51cf66', marginTop: '0.25rem' }}>
-              Value: {selectedBlock.value}
+            <div style={{ color: '#51cf66', marginTop: '0.2rem' }}>
+              {selectedBlock.value}
             </div>
           )}
-          <div style={{ color: '#666', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+          <div style={{ color: '#666', fontSize: '0.7rem', marginTop: '0.2rem' }}>
             {selectedBlock.is_stack ? 'Stack' : 'Heap'}
           </div>
         </div>
       )}
 
+      {/* Legend — bottom-left of 3D pane */}
       <div
         style={{
-          position: 'fixed',
-          bottom: '1rem',
-          left: '1rem',
+          position: 'absolute',
+          bottom: '0.5rem',
+          left: '0.5rem',
           display: 'flex',
-          gap: '1rem',
-          fontSize: '0.75rem',
+          gap: '0.75rem',
+          fontSize: '0.7rem',
+          color: '#e0e0e0',
+          fontFamily: 'monospace',
+          pointerEvents: 'none',
+          userSelect: 'none',
         }}
       >
         <LegendItem color="#4a9eff" label="Stack" />
@@ -89,22 +103,23 @@ export function UI() {
         <LegendItem color="#fcc419" label="Slice" />
       </div>
 
+      {/* Hints — bottom-right of 3D pane */}
       <div
         style={{
-          position: 'fixed',
-          bottom: '1rem',
-          right: '1rem',
-          fontSize: '0.7rem',
-          color: '#666',
+          position: 'absolute',
+          bottom: '0.5rem',
+          right: '0.5rem',
+          fontSize: '0.65rem',
+          color: '#555',
           textAlign: 'right',
+          fontFamily: 'monospace',
+          pointerEvents: 'none',
+          userSelect: 'none',
         }}
       >
-        <div>Click block to select</div>
-        <div>Mouse drag to rotate</div>
-        <div>Scroll to zoom</div>
+        <div>Click to select · Drag to rotate · Scroll to zoom</div>
       </div>
-
-    </div>
+    </>
   );
 }
 

@@ -234,6 +234,10 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand) {
 		log.Printf("Received command: %s", cmd.Action)
 	case "stop":
 		log.Printf("Received command: %s", cmd.Action)
+	case "build_and_start":
+		log.Printf("Received command: %s", cmd.Action)
+	case "restart":
+		log.Printf("Received command: %s", cmd.Action)
 	case "add_breakpoint":
 		var bp BreakpointPayload
 		if err := json.Unmarshal(cmd.Payload, &bp); err != nil {

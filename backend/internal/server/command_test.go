@@ -68,6 +68,7 @@ func TestHandleCommand_WebSocket(t *testing.T) {
 		`{"action":"continue"}`,
 		`{"action":"stop"}`,
 		`{"action":"add_breakpoint","payload":{"file":"main.go","line":10}}`,
+		`{"action":"restart"}`,
 	}
 
 	for _, cmd := range commands {
@@ -94,4 +95,31 @@ func TestHandleCommand_WebSocket(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "unknown_action", errPayload.Code)
 	assert.Contains(t, errPayload.Message, "fly")
+}
+
+func TestBuildPayload_Unmarshal(t *testing.T) {
+	raw := `{"action":"build_and_start","payload":{"code":"package main\n\nfunc main() {}"}}`
+
+	var cmd ClientCommand
+	err := json.Unmarshal([]byte(raw), &cmd)
+	require.NoError(t, err)
+	assert.Equal(t, "build_and_start", cmd.Action)
+
+	var bp BuildPayload
+	err = json.Unmarshal(cmd.Payload, &bp)
+	require.NoError(t, err)
+	assert.Contains(t, bp.Code, "package main")
+}
+
+func TestBuildPayload_EmptyCode(t *testing.T) {
+	raw := `{"action":"build_and_start","payload":{"code":""}}`
+
+	var cmd ClientCommand
+	err := json.Unmarshal([]byte(raw), &cmd)
+	require.NoError(t, err)
+
+	var bp BuildPayload
+	err = json.Unmarshal(cmd.Payload, &bp)
+	require.NoError(t, err)
+	assert.Empty(t, bp.Code)
 }

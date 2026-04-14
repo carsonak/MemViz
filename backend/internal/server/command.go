@@ -13,3 +13,8 @@ type BreakpointPayload struct {
 	File string `json:"file"`
 	Line int    `json:"line"`
 }
+
+// BuildPayload is the payload for the "build_and_start" action.
+type BuildPayload struct {
+	Code string `json:"code"`
+}

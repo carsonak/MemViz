@@ -13,6 +13,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@react-three/drei": "^9.102.6",
     "@react-three/fiber": "^8.15.19",
     "react": "^18.2.0",

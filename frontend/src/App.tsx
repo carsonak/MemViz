@@ -5,6 +5,7 @@ import { MemoryScene } from './components/MemoryScene';
 import { UI } from './components/UI';
 import { DebuggerControls } from './components/UI';
 import { CodeEditor, DEFAULT_CODE } from './components/CodeEditor';
+import { ProgramConsole } from './components/ProgramConsole';
 import { NavBar } from './components/NavBar';
 import { useMemoryStore } from './store/memoryStore';
 
@@ -87,6 +88,9 @@ function App() {
             <DebuggerControls sendCommand={sendCommand} disabled={!isConnected} onStart={handleStart} />
             <div style={{ flex: 1, minHeight: 0 }}>
               <CodeEditor value={code} onChange={setCode} />
+            </div>
+            <div style={{ height: '30%', minHeight: 80, flexShrink: 0 }}>
+              <ProgramConsole />
             </div>
           </div>
         )}

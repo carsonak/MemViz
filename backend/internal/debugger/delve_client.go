@@ -416,6 +416,29 @@ func (d *DelveClient) SetBreakpoint(_ context.Context, file string, line int) (*
 	}, nil
 }
 
+// SetFunctionBreakpoint sets a breakpoint at the entry of the named function.
+func (d *DelveClient) SetFunctionBreakpoint(_ context.Context, functionName string) (*Breakpoint, error) {
+	client, err := d.rpc()
+	if err != nil {
+		return nil, err
+	}
+
+	var out createBreakpointOut
+	if err := client.Call("RPCServer.CreateBreakpoint", createBreakpointIn{
+		Breakpoint: dlvBreakpoint{FunctionName: functionName},
+	}, &out); err != nil {
+		return nil, fmt.Errorf("setting function breakpoint at %s: %w", functionName, err)
+	}
+
+	return &Breakpoint{
+		ID:       out.Breakpoint.ID,
+		File:     out.Breakpoint.File,
+		Line:     out.Breakpoint.Line,
+		Function: out.Breakpoint.FunctionName,
+		Enabled:  true,
+	}, nil
+}
+
 // ClearBreakpoint removes the breakpoint with the given Delve-assigned ID.
 func (d *DelveClient) ClearBreakpoint(_ context.Context, id int) error {
 	client, err := d.rpc()

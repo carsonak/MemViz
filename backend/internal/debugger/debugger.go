@@ -23,6 +23,9 @@ type Client interface {
 	// SetBreakpoint sets a breakpoint at the specified file:line
 	SetBreakpoint(ctx context.Context, file string, line int) (*Breakpoint, error)
 
+	// SetFunctionBreakpoint sets a breakpoint at the entry of the named function
+	SetFunctionBreakpoint(ctx context.Context, functionName string) (*Breakpoint, error)
+
 	// ClearBreakpoint removes a breakpoint by ID
 	ClearBreakpoint(ctx context.Context, id int) error
 

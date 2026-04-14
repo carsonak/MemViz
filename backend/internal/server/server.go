@@ -549,5 +549,17 @@ func launchDebugSession(sess *session, binPath string, conn *websocket.Conn) err
 	})
 	sess.client = delveClient
 
-	return sess.client.LaunchProgram(context.Background(), binPath)
+	if err := sess.client.LaunchProgram(context.Background(), binPath); err != nil {
+		return err
+	}
+
+	// Auto-advance to main.main so the debugger doesn't exit immediately.
+	if _, err := sess.client.SetFunctionBreakpoint(context.Background(), "main.main"); err != nil {
+		log.Printf("warning: could not set main.main breakpoint: %v", err)
+	}
+	if _, err := sess.client.Continue(context.Background()); err != nil {
+		log.Printf("warning: continue to main.main failed: %v", err)
+	}
+
+	return nil
 }

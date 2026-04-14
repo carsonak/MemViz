@@ -106,6 +106,28 @@ func (m *MockClient) SetBreakpoint(_ context.Context, file string, line int) (*B
 	return bp, nil
 }
 
+// SetFunctionBreakpoint creates a breakpoint for the named function.
+func (m *MockClient) SetFunctionBreakpoint(_ context.Context, functionName string) (*Breakpoint, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.connected {
+		return nil, ErrNotConnected
+	}
+
+	bp := &Breakpoint{
+		ID:       m.nextBpID,
+		File:     "main.go",
+		Line:     1,
+		Function: functionName,
+		Enabled:  true,
+	}
+	m.breakpoints[bp.ID] = bp
+	m.nextBpID++
+
+	return bp, nil
+}
+
 // ClearBreakpoint removes the breakpoint with the given ID.
 func (m *MockClient) ClearBreakpoint(_ context.Context, id int) error {
 	m.mu.Lock()

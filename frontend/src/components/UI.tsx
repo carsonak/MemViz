@@ -147,9 +147,11 @@ const controlButtonDisabledStyle: React.CSSProperties = {
 export function DebuggerControls({
   sendCommand,
   disabled,
+  code,
 }: {
   sendCommand: (action: string, payload?: unknown) => void;
   disabled: boolean;
+  code?: string;
 }) {
   const actions = [
     { label: '▶️ Start', action: 'start' },
@@ -172,7 +174,11 @@ export function DebuggerControls({
           key={action}
           style={disabled ? controlButtonDisabledStyle : controlButtonStyle}
           disabled={disabled}
-          onClick={() => sendCommand(action)}
+          onClick={() =>
+            action === 'start'
+              ? sendCommand(action, { code })
+              : sendCommand(action)
+          }
           onMouseEnter={(e) => {
             if (!disabled) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
           }}

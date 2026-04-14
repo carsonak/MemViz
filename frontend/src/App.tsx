@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { MemoryScene } from './components/MemoryScene';
 import { UI } from './components/UI';
 import { DebuggerControls } from './components/UI';
-import { CodeEditor } from './components/CodeEditor';
+import { CodeEditor, DEFAULT_CODE } from './components/CodeEditor';
 import { useMemoryStore } from './store/memoryStore';
 
 function App() {
@@ -12,6 +12,7 @@ function App() {
   const connect = useMemoryStore((state) => state.connect);
   const disconnect = useMemoryStore((state) => state.disconnect);
   const sendCommand = useMemoryStore((state) => state.sendCommand);
+  const [code, setCode] = useState(DEFAULT_CODE);
 
   useEffect(() => {
     connect();
@@ -31,9 +32,9 @@ function App() {
           borderRight: '1px solid #333',
         }}
       >
-        <DebuggerControls sendCommand={sendCommand} disabled={!isConnected} />
+        <DebuggerControls sendCommand={sendCommand} disabled={!isConnected} code={code} />
         <div style={{ flex: 1, minHeight: 0 }}>
-          <CodeEditor />
+          <CodeEditor value={code} onChange={setCode} />
         </div>
       </div>
 

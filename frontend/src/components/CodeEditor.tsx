@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import Editor from '@monaco-editor/react';
 
-const DEFAULT_CODE = `package main
+export const DEFAULT_CODE = `package main
 
 import "fmt"
 
@@ -65,16 +64,20 @@ func main() {
 }
 `;
 
-export function CodeEditor() {
-  const [code, setCode] = useState(DEFAULT_CODE);
-
+export function CodeEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
     <Editor
       height="100%"
       language="go"
       theme="vs-dark"
-      value={code}
-      onChange={(value) => setCode(value ?? '')}
+      value={value}
+      onChange={(v) => onChange(v ?? '')}
       options={{
         minimap: { enabled: false },
         fontSize: 14,

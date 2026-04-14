@@ -357,7 +357,21 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 			sendError(conn, "", "invalid breakpoint payload", "parse_error")
 			return
 		}
-		log.Printf("Received command: %s file=%s line=%d", cmd.Action, bp.File, bp.Line)
+		if sess.client == nil {
+			sendError(conn, "", "no active debug session", "no_session")
+			return
+		}
+		bpResult, err := sess.client.SetBreakpoint(context.Background(), bp.File, bp.Line)
+		if err != nil {
+			log.Printf("SetBreakpoint failed: %v", err)
+			sendError(conn, "", err.Error(), "breakpoint_error")
+			return
+		}
+		log.Printf("Breakpoint set: id=%d file=%s line=%d", bpResult.ID, bpResult.File, bpResult.Line)
+		sendJSON(conn, WSMessage{
+			Type:    "breakpoint_set",
+			Payload: marshalPayload(bpResult),
+		})
 	default:
 		log.Printf("Unknown command action: %s", cmd.Action)
 		sendError(conn, "", "unknown command action: "+cmd.Action, "unknown_action")

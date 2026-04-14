@@ -170,6 +170,15 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
               isConnected: payload.connected,
               isDebugging: payload.debugging,
             });
+            // Re-hydrate editor breakpoints to the new debugger session.
+            if (payload.connected && payload.debugging) {
+              setTimeout(() => {
+                const bps = get().breakpoints;
+                for (const bp of bps) {
+                  get().sendCommand("add_breakpoint", { file: bp.file, line: bp.line });
+                }
+              }, 100);
+            }
             break;
           }
           case "error": {

@@ -17,9 +17,6 @@ import type {
  * Zustand store that holds all MemViz frontend state: the active memory graph,
  * historical snapshots for time-travel, WebSocket lifecycle, and UI selection state.
  */
-/** Module-level WebSocket instance, kept outside Zustand to avoid serialisation issues. */
-let ws: WebSocket | null = null;
-
 /** Maximum number of historical memory states to keep in the time-travel buffer. */
 const MAX_HISTORY_LENGTH = 100;
 
@@ -33,6 +30,7 @@ const MAX_HISTORY_LENGTH = 100;
  */
 interface MemoryState {
   // Connection state
+  ws: WebSocket | null;
   isConnected: boolean;
   isDebugging: boolean;
   programPath: string | null;
@@ -70,6 +68,7 @@ interface MemoryState {
 
 /** Zero-value snapshot used by reset() to restore the store to its initial state. */
 const initialState = {
+  ws: null as WebSocket | null,
   isConnected: false,
   isDebugging: false,
   programPath: null,
@@ -135,9 +134,16 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   setZoomLevel: (level) => set({ zoomLevel: level }),
 
   connect: (url = "ws://localhost:8080/ws") => {
-    if (ws && ws.readyState === WebSocket.OPEN) return;
+    const existing = get().ws;
+    if (
+      existing &&
+      (existing.readyState === WebSocket.OPEN ||
+        existing.readyState === WebSocket.CONNECTING)
+    )
+      return;
 
-    ws = new WebSocket(url);
+    const ws = new WebSocket(url);
+    set({ ws });
 
     ws.onopen = () => {
       set({ isConnected: true });
@@ -173,8 +179,9 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     };
 
     ws.onclose = () => {
-      set({ isConnected: false, isDebugging: false });
-      ws = null;
+      if (get().ws === ws) {
+        set({ ws: null, isConnected: false, isDebugging: false });
+      }
     };
 
     ws.onerror = (err) => {
@@ -183,12 +190,15 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
 
   disconnect: () => {
-    ws?.close();
-    ws = null;
-    set({ isConnected: false, isDebugging: false });
+    const ws = get().ws;
+    if (ws) {
+      ws.close();
+    }
+    set({ ws: null, isConnected: false, isDebugging: false });
   },
 
   sendMessage: (type, payload = {}) => {
+    const ws = get().ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.warn("[MemViz] WebSocket not connected");
       return;
@@ -198,6 +208,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
 
   sendCommand: (action, payload) => {
+    const ws = get().ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.warn("[MemViz] WebSocket not connected, cannot send command:", action);
       return;
@@ -207,8 +218,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
 
   reset: () => {
-    ws?.close();
-    ws = null;
+    get().ws?.close();
     set(initialState);
   },
 }));

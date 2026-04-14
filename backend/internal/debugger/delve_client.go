@@ -1,12 +1,13 @@
 package debugger
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/rpc"
 	"net/rpc/jsonrpc"
-	"os"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -24,6 +25,9 @@ type DelveClient struct {
 	connected  bool
 	listenAddr string
 	stepNumber int
+
+	// outputCb is invoked for each line of the target program's stdout/stderr.
+	outputCb func(string)
 
 	// BuildGraphFunc is called by GetMemoryGraph to construct a MemoryGraph
 	// from variables. Injected by the caller (e.g. server) to break the
@@ -215,6 +219,26 @@ func defaultLoadConfig() dlvLoadConfig {
 	}
 }
 
+// SetOutputCallback registers cb to receive lines of program stdout/stderr.
+func (d *DelveClient) SetOutputCallback(cb func(string)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.outputCb = cb
+}
+
+// scanPipe reads lines from r and forwards them to the output callback.
+func (d *DelveClient) scanPipe(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		d.mu.Lock()
+		cb := d.outputCb
+		d.mu.Unlock()
+		if cb != nil {
+			cb(scanner.Text())
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Client interface – process management
 // ---------------------------------------------------------------------------
@@ -242,11 +266,23 @@ func (d *DelveClient) LaunchProgram(ctx context.Context, programPath string) err
 		"--api-version=2",
 		"--log=false",
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("creating stdout pipe: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("creating stderr pipe: %w", err)
+	}
+
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("starting delve: %w", err)
 	}
+
+	// Stream stdout and stderr to the output callback in background goroutines.
+	go d.scanPipe(stdoutPipe)
+	go d.scanPipe(stderrPipe)
 
 	d.mu.Lock()
 	d.process = cmd

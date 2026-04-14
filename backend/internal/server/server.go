@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -49,10 +50,16 @@ type ErrorPayload struct {
 	Code    string `json:"code,omitempty"`
 }
 
+// OutputPayload is the payload for "output" messages (target program stdout/stderr).
+type OutputPayload struct {
+	Text string `json:"text"`
+}
+
 // session holds mutable per-connection state shared between message handlers.
 type session struct {
 	client            debugger.Client
 	currentBinaryPath string
+	connMu            sync.Mutex // guards WebSocket writes from concurrent goroutines
 }
 
 // Server represents the MemViz WebSocket server
@@ -184,6 +191,15 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				// We set a max pointer depth of 5 to prevent runaway traversal
 				return graph.NewBuilder(5).BuildFromVariables(vars, ss, step)
 			}
+
+			delveClient.SetOutputCallback(func(line string) {
+				sess.connMu.Lock()
+				defer sess.connMu.Unlock()
+				sendJSON(conn, WSMessage{
+					Type:    "output",
+					Payload: marshalPayload(OutputPayload{Text: line}),
+				})
+			})
 
 			sess.client = delveClient
 
@@ -358,7 +374,7 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 		}
 		sess.currentBinaryPath = binPath
 
-		if err := launchDebugSession(sess, binPath); err != nil {
+		if err := launchDebugSession(sess, binPath, conn); err != nil {
 			log.Printf("Launch failed: %v", err)
 			sendError(conn, "", err.Error(), "launch_error")
 			return
@@ -386,7 +402,7 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 			return
 		}
 
-		if err := launchDebugSession(sess, sess.currentBinaryPath); err != nil {
+		if err := launchDebugSession(sess, sess.currentBinaryPath, conn); err != nil {
 			log.Printf("Restart launch failed: %v", err)
 			sendError(conn, "", err.Error(), "launch_error")
 			return
@@ -513,7 +529,8 @@ func buildCode(code string) (string, error) {
 
 // launchDebugSession disconnects any existing client, creates a fresh Delve
 // client, and launches the binary at binPath under the debugger.
-func launchDebugSession(sess *session, binPath string) error {
+// conn is used to wire the program output callback.
+func launchDebugSession(sess *session, binPath string, conn *websocket.Conn) error {
 	if sess.client != nil {
 		_ = sess.client.Disconnect()
 	}
@@ -522,6 +539,14 @@ func launchDebugSession(sess *session, binPath string) error {
 	delveClient.BuildGraphFunc = func(vars []*debugger.Variable, ss *debugger.StopState, step int) *debugger.MemoryGraph {
 		return graph.NewBuilder(5).BuildFromVariables(vars, ss, step)
 	}
+	delveClient.SetOutputCallback(func(line string) {
+		sess.connMu.Lock()
+		defer sess.connMu.Unlock()
+		sendJSON(conn, WSMessage{
+			Type:    "output",
+			Payload: marshalPayload(OutputPayload{Text: line}),
+		})
+	})
 	sess.client = delveClient
 
 	return sess.client.LaunchProgram(context.Background(), binPath)

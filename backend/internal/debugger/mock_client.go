@@ -65,6 +65,9 @@ func (m *MockClient) Disconnect() error {
 	return nil
 }
 
+// SetOutputCallback is a no-op for the mock client.
+func (m *MockClient) SetOutputCallback(_ func(string)) {}
+
 // LaunchProgram marks the client as connected. If LaunchError is set it is returned.
 func (m *MockClient) LaunchProgram(_ context.Context, _ string) error {
 	m.mu.Lock()

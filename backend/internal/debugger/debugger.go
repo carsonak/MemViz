@@ -50,6 +50,9 @@ type Client interface {
 	// GetMemoryGraph traverses the object graph starting from local variables
 	// maxDepth limits how deep to traverse pointer references
 	GetMemoryGraph(ctx context.Context, maxDepth int) (*MemoryGraph, error)
+
+	// SetOutputCallback registers a function that receives lines of program stdout/stderr.
+	SetOutputCallback(cb func(line string))
 }
 
 // Breakpoint represents a debugger breakpoint

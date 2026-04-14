@@ -59,6 +59,7 @@ type OutputPayload struct {
 type session struct {
 	client            debugger.Client
 	currentBinaryPath string
+	tempDir           string
 	connMu            sync.Mutex // guards WebSocket writes from concurrent goroutines
 }
 
@@ -373,6 +374,7 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 			return
 		}
 		sess.currentBinaryPath = binPath
+		sess.tempDir = filepath.Dir(binPath)
 
 		if err := launchDebugSession(sess, binPath, conn); err != nil {
 			log.Printf("Launch failed: %v", err)
@@ -435,7 +437,11 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 			sendError(conn, "", "no active debug session", "no_session")
 			return
 		}
-		bpResult, err := sess.client.SetBreakpoint(context.Background(), bp.File, bp.Line)
+		absPath := bp.File
+		if sess.tempDir != "" {
+			absPath = filepath.Join(sess.tempDir, bp.File)
+		}
+		bpResult, err := sess.client.SetBreakpoint(context.Background(), absPath, bp.Line)
 		if err != nil {
 			log.Printf("SetBreakpoint failed: %v", err)
 			sendError(conn, "", err.Error(), "breakpoint_error")

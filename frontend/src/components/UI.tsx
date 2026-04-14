@@ -11,6 +11,8 @@ export function UI() {
   const selectedBlockId = useMemoryStore((state) => state.selectedBlockId);
   const stackBlocks = useMemoryStore((state) => state.stackBlocks);
   const heapBlocks = useMemoryStore((state) => state.heapBlocks);
+  const sendCommand = useMemoryStore((state) => state.sendCommand);
+  const isConnected = useMemoryStore((state) => state.isConnected);
 
   const selectedBlock = [...stackBlocks, ...heapBlocks].find(
     (b) => b.id === selectedBlockId
@@ -101,6 +103,8 @@ export function UI() {
         <div>Mouse drag to rotate</div>
         <div>Scroll to zoom</div>
       </div>
+
+      <DebuggerControls sendCommand={sendCommand} disabled={!isConnected} />
     </div>
   );
 }
@@ -118,6 +122,70 @@ function LegendItem({ color, label }: { color: string; label: string }) {
         }}
       />
       <span>{label}</span>
+    </div>
+  );
+}
+
+const controlButtonStyle: React.CSSProperties = {
+  background: 'rgba(255, 255, 255, 0.08)',
+  border: '1px solid #444',
+  borderRadius: '4px',
+  color: '#e0e0e0',
+  fontFamily: 'monospace',
+  fontSize: '0.8rem',
+  padding: '0.4rem 0.75rem',
+  cursor: 'pointer',
+  transition: 'background 0.15s',
+};
+
+const controlButtonDisabledStyle: React.CSSProperties = {
+  ...controlButtonStyle,
+  opacity: 0.4,
+  cursor: 'not-allowed',
+};
+
+/** Debugger control buttons wired to sendCommand. */
+function DebuggerControls({
+  sendCommand,
+  disabled,
+}: {
+  sendCommand: (action: string, payload?: unknown) => void;
+  disabled: boolean;
+}) {
+  const actions = [
+    { label: '▶️ Start', action: 'start' },
+    { label: '⏭️ Step', action: 'step' },
+    { label: '⏩ Continue', action: 'continue' },
+    { label: '⏹️ Stop', action: 'stop' },
+  ] as const;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: '1rem',
+        right: '1rem',
+        display: 'flex',
+        gap: '0.5rem',
+        pointerEvents: 'auto',
+      }}
+    >
+      {actions.map(({ label, action }) => (
+        <button
+          key={action}
+          style={disabled ? controlButtonDisabledStyle : controlButtonStyle}
+          disabled={disabled}
+          onClick={() => sendCommand(action)}
+          onMouseEnter={(e) => {
+            if (!disabled) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+          }}
+          onMouseLeave={(e) => {
+            if (!disabled) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+          }}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   );
 }

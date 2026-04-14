@@ -329,4 +329,48 @@ describe("memoryStore", () => {
       expect(MockWebSocket.instances).toHaveLength(0);
     });
   });
+
+  describe("sendCommand", () => {
+    it("sends a command with action only", () => {
+      useMemoryStore.getState().connect("ws://localhost:8080/ws");
+      const mockWs = MockWebSocket.instances[0];
+      mockWs.simulateOpen();
+
+      useMemoryStore.getState().sendCommand("start");
+
+      expect(mockWs.sentMessages).toHaveLength(1);
+      const sent = JSON.parse(mockWs.sentMessages[0]);
+      expect(sent.action).toBe("start");
+      expect(sent.payload).toBeUndefined();
+    });
+
+    it("sends a command with payload", () => {
+      useMemoryStore.getState().connect("ws://localhost:8080/ws");
+      const mockWs = MockWebSocket.instances[0];
+      mockWs.simulateOpen();
+
+      useMemoryStore
+        .getState()
+        .sendCommand("add_breakpoint", { file: "main.go", line: 42 });
+
+      expect(mockWs.sentMessages).toHaveLength(1);
+      const sent = JSON.parse(mockWs.sentMessages[0]);
+      expect(sent.action).toBe("add_breakpoint");
+      expect(sent.payload).toEqual({ file: "main.go", line: 42 });
+    });
+
+    it("does not send command when not connected", () => {
+      useMemoryStore.getState().sendCommand("step");
+      expect(MockWebSocket.instances).toHaveLength(0);
+    });
+
+    it("does not send command when socket is not open", () => {
+      useMemoryStore.getState().connect("ws://localhost:8080/ws");
+      const mockWs = MockWebSocket.instances[0];
+      // readyState is still CONNECTING (0), not OPEN
+
+      useMemoryStore.getState().sendCommand("step");
+      expect(mockWs.sentMessages).toHaveLength(0);
+    });
+  });
 });

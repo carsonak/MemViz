@@ -10,6 +10,7 @@ import type {
   MemoryUpdatePayload,
   StatusPayload,
   ErrorPayload,
+  ClientCommand,
 } from "../types";
 
 /**
@@ -64,6 +65,7 @@ interface MemoryState {
   connect: (url?: string) => void;
   disconnect: () => void;
   sendMessage: (type: WSMessageType, payload?: unknown) => void;
+  sendCommand: (action: string, payload?: unknown) => void;
 }
 
 /** Zero-value snapshot used by reset() to restore the store to its initial state. */
@@ -193,6 +195,15 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     }
     const msg: WSMessage = { type, payload };
     ws.send(JSON.stringify(msg));
+  },
+
+  sendCommand: (action, payload) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.warn("[MemViz] WebSocket not connected, cannot send command:", action);
+      return;
+    }
+    const cmd: ClientCommand = payload !== undefined ? { action, payload } : { action };
+    ws.send(JSON.stringify(cmd));
   },
 
   reset: () => {

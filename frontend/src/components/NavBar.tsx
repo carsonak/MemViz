@@ -89,47 +89,55 @@ function StatsDropdown() {
   const framesRef = useRef<number[]>([]);
   const busyRef = useRef<number[]>([]);
   const lastFrameTime = useRef(performance.now());
+  const lastUiUpdate = useRef(0);
 
   useEffect(() => {
     let raf: number;
     const coreCount = navigator.hardwareConcurrency || 4;
+    const UPDATE_INTERVAL = 300; // ms between UI updates
 
     const tick = () => {
       const now = performance.now();
       const dt = now - lastFrameTime.current;
       lastFrameTime.current = now;
 
-      // FPS
+      // Always collect samples every frame
       framesRef.current.push(now);
       framesRef.current = framesRef.current.filter((t) => now - t < 1000);
-      setFps(framesRef.current.length);
 
-      // Main-thread busy estimate: if a frame takes longer than 16.67ms
-      // the excess is "busy" time. We track ratio over the last second.
       const idealFrame = 1000 / 60;
       const busyRatio = Math.min(dt / idealFrame, coreCount) / coreCount;
       busyRef.current.push(busyRatio);
       if (busyRef.current.length > 60) busyRef.current.shift();
-      const avg = busyRef.current.reduce((a, b) => a + b, 0) / busyRef.current.length;
-      const avgPct = Math.round(avg * 100);
-      setCpuAvg(avgPct);
 
-      // Simulated per-core spread: distribute load with slight jitter
-      const cores: number[] = [];
-      for (let i = 0; i < coreCount; i++) {
-        // Core 0 carries most of the main-thread load
-        const base = i === 0 ? avgPct * 1.4 : avgPct * 0.6;
-        const jitter = (Math.random() - 0.5) * 8;
-        cores.push(Math.max(0, Math.min(100, Math.round(base + jitter))));
-      }
-      setCpuPerCore(cores);
+      // Only flush to React state every 300ms
+      if (now - lastUiUpdate.current >= UPDATE_INTERVAL) {
+        lastUiUpdate.current = now;
 
-      // Memory %
-      const perf = performance as Performance & {
-        memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number };
-      };
-      if (perf.memory) {
-        setMemPct(Math.round((perf.memory.usedJSHeapSize / perf.memory.jsHeapSizeLimit) * 100));
+        // FPS
+        setFps(framesRef.current.length);
+
+        // CPU avg
+        const avg = busyRef.current.reduce((a, b) => a + b, 0) / busyRef.current.length;
+        const avgPct = Math.round(avg * 100);
+        setCpuAvg(avgPct);
+
+        // Per-core spread
+        const cores: number[] = [];
+        for (let i = 0; i < coreCount; i++) {
+          const base = i === 0 ? avgPct * 1.4 : avgPct * 0.6;
+          const jitter = (Math.random() - 0.5) * 8;
+          cores.push(Math.max(0, Math.min(100, Math.round(base + jitter))));
+        }
+        setCpuPerCore(cores);
+
+        // Memory %
+        const perf = performance as Performance & {
+          memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number };
+        };
+        if (perf.memory) {
+          setMemPct(Math.round((perf.memory.usedJSHeapSize / perf.memory.jsHeapSizeLimit) * 100));
+        }
       }
 
       raf = requestAnimationFrame(tick);

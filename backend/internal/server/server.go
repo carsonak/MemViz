@@ -51,7 +51,7 @@ type ErrorPayload struct {
 
 // session holds mutable per-connection state shared between message handlers.
 type session struct {
-	client           debugger.Client
+	client            debugger.Client
 	currentBinaryPath string
 }
 

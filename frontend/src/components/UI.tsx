@@ -147,11 +147,11 @@ const controlButtonDisabledStyle: React.CSSProperties = {
 export function DebuggerControls({
   sendCommand,
   disabled,
-  code,
+  onStart,
 }: {
   sendCommand: (action: string, payload?: unknown) => void;
   disabled: boolean;
-  code?: string;
+  onStart: () => void;
 }) {
   const actions = [
     { label: '▶️ Start', action: 'start' },
@@ -176,7 +176,7 @@ export function DebuggerControls({
           disabled={disabled}
           onClick={() =>
             action === 'start'
-              ? sendCommand(action, { code })
+              ? onStart()
               : sendCommand(action)
           }
           onMouseEnter={(e) => {

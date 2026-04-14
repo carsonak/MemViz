@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { MemoryScene } from './components/MemoryScene';
@@ -13,6 +13,16 @@ function App() {
   const disconnect = useMemoryStore((state) => state.disconnect);
   const sendCommand = useMemoryStore((state) => state.sendCommand);
   const [code, setCode] = useState(DEFAULT_CODE);
+  const lastBuiltCode = useRef('');
+
+  const handleStart = useCallback(() => {
+    if (code !== lastBuiltCode.current) {
+      sendCommand('build_and_start', { code });
+      lastBuiltCode.current = code;
+    } else {
+      sendCommand('restart');
+    }
+  }, [code, sendCommand]);
 
   useEffect(() => {
     connect();
@@ -32,7 +42,7 @@ function App() {
           borderRight: '1px solid #333',
         }}
       >
-        <DebuggerControls sendCommand={sendCommand} disabled={!isConnected} code={code} />
+        <DebuggerControls sendCommand={sendCommand} disabled={!isConnected} onStart={handleStart} />
         <div style={{ flex: 1, minHeight: 0 }}>
           <CodeEditor value={code} onChange={setCode} />
         </div>

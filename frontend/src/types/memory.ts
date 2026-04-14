@@ -136,3 +136,14 @@ export interface StatusPayload {
   debugging: boolean;
   program?: string;
 }
+
+/** A command sent from the client to the backend via WebSocket.
+ *
+ * Matches the Go backend's ClientCommand struct.
+ * action – the command to execute (e.g. "start", "stop", "step", "continue", "add_breakpoint").
+ * payload – optional action-specific data.
+ */
+export interface ClientCommand {
+  action: string;
+  payload?: unknown;
+}

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/rpc"
 	"net/rpc/jsonrpc"
+	"os"
 	"os/exec"
 	"reflect"
 	"strings"
@@ -235,12 +236,14 @@ func (d *DelveClient) LaunchProgram(ctx context.Context, programPath string) err
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
-	cmd := exec.CommandContext(ctx, "dlv", "debug", programPath,
+	cmd := exec.CommandContext(ctx, "dlv", "exec", programPath,
 		"--headless",
 		"--listen="+addr,
 		"--api-version=2",
 		"--log=false",
 	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("starting delve: %w", err)
 	}
@@ -265,12 +268,13 @@ func (d *DelveClient) LaunchProgram(ctx context.Context, programPath string) err
 }
 
 // Connect establishes a JSON-RPC connection to a running Delve instance.
-// It retries until successful or the context / timeout expires.
+// It retries up to 10 times with 100ms between attempts.
 func (d *DelveClient) Connect(ctx context.Context, addr string) error {
-	deadline := time.Now().Add(delveStartupTimeout)
+	const maxRetries = 10
+	const retryDelay = 100 * time.Millisecond
 
 	var lastErr error
-	for time.Now().Before(deadline) {
+	for attempt := 0; attempt < maxRetries; attempt++ {
 		select {
 		case <-ctx.Done():
 			if lastErr != nil {
@@ -283,7 +287,7 @@ func (d *DelveClient) Connect(ctx context.Context, addr string) error {
 		conn, err := net.DialTimeout("tcp", addr, time.Second)
 		if err != nil {
 			lastErr = err
-			time.Sleep(rpcRetryDelay)
+			time.Sleep(retryDelay)
 			continue
 		}
 
@@ -298,7 +302,7 @@ func (d *DelveClient) Connect(ctx context.Context, addr string) error {
 		return nil
 	}
 
-	return fmt.Errorf("connecting to delve at %s: %w", addr, lastErr)
+	return fmt.Errorf("connecting to delve at %s after %d attempts: %w", addr, maxRetries, lastErr)
 }
 
 // Disconnect gracefully detaches from Delve and kills the spawned process.

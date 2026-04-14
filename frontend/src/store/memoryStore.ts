@@ -47,6 +47,7 @@ interface MemoryState {
   hoveredBlockId: string | null;
   showPointers: boolean;
   zoomLevel: number;
+  programOutput: string[];
   setConnected: (connected: boolean) => void;
   setDebugging: (debugging: boolean) => void;
   setProgramPath: (path: string | null) => void;
@@ -58,6 +59,7 @@ interface MemoryState {
   setHoveredBlock: (id: string | null) => void;
   setShowPointers: (show: boolean) => void;
   setZoomLevel: (level: number) => void;
+  clearOutput: () => void;
   reset: () => void;
   /** Opens a WebSocket connection to the backend and begins processing messages. url defaults to the local dev server. */
   connect: (url?: string) => void;
@@ -83,6 +85,7 @@ const initialState = {
   hoveredBlockId: null,
   showPointers: false,
   zoomLevel: 1,
+  programOutput: [] as string[],
 };
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
@@ -133,6 +136,8 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
   setZoomLevel: (level) => set({ zoomLevel: level }),
 
+  clearOutput: () => set({ programOutput: [] }),
+
   connect: (url = "ws://localhost:8080/ws") => {
     const existing = get().ws;
     if (
@@ -170,6 +175,16 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
           case "error": {
             const payload = msg.payload as ErrorPayload;
             console.error(`[MemViz] ${payload.code}: ${payload.message}`);
+            break;
+          }
+          case "output": {
+            const payload = msg.payload as { text: string };
+            set((state) => ({
+              programOutput:
+                state.programOutput.length >= 500
+                  ? [...state.programOutput.slice(-499), payload.text]
+                  : [...state.programOutput, payload.text],
+            }));
             break;
           }
         }

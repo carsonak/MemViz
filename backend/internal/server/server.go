@@ -312,6 +312,16 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 			Payload: marshalPayload(StatusPayload{Connected: true, Debugging: true, Program: binPath}),
 		})
 
+		if g, err := sess.client.GetMemoryGraph(context.Background(), 5); err != nil {
+			log.Printf("get initial memory graph failed: %v", err)
+			sendError(conn, "", err.Error(), "graph_error")
+		} else {
+			sendJSON(conn, WSMessage{
+				Type:    "memory_update",
+				Payload: marshalPayload(MemoryUpdatePayload{Graph: g}),
+			})
+		}
+
 	case "restart":
 		if sess.currentBinaryPath == "" {
 			sendError(conn, "", "no previously built binary; send build_and_start first", "no_binary")
@@ -329,6 +339,16 @@ func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand, sess *se
 			Type:    "status",
 			Payload: marshalPayload(StatusPayload{Connected: true, Debugging: true, Program: sess.currentBinaryPath}),
 		})
+
+		if g, err := sess.client.GetMemoryGraph(context.Background(), 5); err != nil {
+			log.Printf("get initial memory graph after restart failed: %v", err)
+			sendError(conn, "", err.Error(), "graph_error")
+		} else {
+			sendJSON(conn, WSMessage{
+				Type:    "memory_update",
+				Payload: marshalPayload(MemoryUpdatePayload{Graph: g}),
+			})
+		}
 
 	case "add_breakpoint":
 		var bp BreakpointPayload

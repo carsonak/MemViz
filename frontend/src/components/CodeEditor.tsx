@@ -1,4 +1,7 @@
-import Editor from '@monaco-editor/react';
+import { useRef, useCallback } from 'react';
+import Editor, { type OnMount } from '@monaco-editor/react';
+import type * as Monaco from 'monaco-editor';
+import { useMemoryStore } from '../store/memoryStore';
 
 export const DEFAULT_CODE = `package main
 
@@ -64,6 +67,11 @@ func main() {
 }
 `;
 
+/** Tracks which lines have breakpoint decorations (line → true). */
+type BreakpointLines = Set<number>;
+
+let nextLocalBpId = 1;
+
 export function CodeEditor({
   value,
   onChange,
@@ -71,6 +79,59 @@ export function CodeEditor({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const breakpointLinesRef = useRef<BreakpointLines>(new Set());
+  const decorationsRef = useRef<Monaco.editor.IEditorDecorationsCollection | null>(null);
+
+  const handleMount: OnMount = useCallback((editor, monaco) => {
+    decorationsRef.current = editor.createDecorationsCollection([]);
+
+    editor.onMouseDown((e) => {
+      const target = e.target;
+      if (
+        target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN &&
+        target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
+      ) {
+        return;
+      }
+
+      const lineNumber = target.position?.lineNumber;
+      if (lineNumber == null) return;
+
+      const lines = breakpointLinesRef.current;
+
+      if (lines.has(lineNumber)) {
+        lines.delete(lineNumber);
+      } else {
+        lines.add(lineNumber);
+        const id = nextLocalBpId++;
+        useMemoryStore.getState().addBreakpoint({
+          id,
+          file: 'main.go',
+          line: lineNumber,
+          enabled: true,
+        });
+        useMemoryStore.getState().sendCommand('add_breakpoint', {
+          file: 'main.go',
+          line: lineNumber,
+        });
+      }
+
+      // Rebuild decorations from current set.
+      const newDecorations: Monaco.editor.IModelDeltaDecoration[] = [];
+      for (const ln of lines) {
+        newDecorations.push({
+          range: new monaco.Range(ln, 1, ln, 1),
+          options: {
+            isWholeLine: true,
+            glyphMarginClassName: 'breakpoint-glyph',
+            glyphMarginHoverMessage: { value: `Breakpoint — line ${ln}` },
+          },
+        });
+      }
+      decorationsRef.current?.set(newDecorations);
+    });
+  }, []);
+
   return (
     <Editor
       height="100%"
@@ -78,11 +139,13 @@ export function CodeEditor({
       theme="vs-dark"
       value={value}
       onChange={(v) => onChange(v ?? '')}
+      onMount={handleMount}
       options={{
         minimap: { enabled: false },
         fontSize: 14,
         scrollBeyondLastLine: false,
         automaticLayout: true,
+        glyphMargin: true,
       }}
     />
   );

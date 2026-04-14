@@ -230,6 +230,9 @@ func (d *DelveClient) SetOutputCallback(cb func(string)) {
 func (d *DelveClient) scanPipe(r io.Reader) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
+		if strings.HasPrefix(scanner.Text(), "API server listening at:") {
+			continue
+		}
 		d.mu.Lock()
 		cb := d.outputCb
 		d.mu.Unlock()

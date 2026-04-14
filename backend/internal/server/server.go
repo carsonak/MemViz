@@ -225,7 +225,27 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 // handleCommand processes a ClientCommand received over the WebSocket.
 func (s *Server) handleCommand(conn *websocket.Conn, cmd ClientCommand) {
-	log.Printf("Received command: %s", cmd.Action)
+	switch cmd.Action {
+	case "start":
+		log.Printf("Received command: %s", cmd.Action)
+	case "step":
+		log.Printf("Received command: %s", cmd.Action)
+	case "continue":
+		log.Printf("Received command: %s", cmd.Action)
+	case "stop":
+		log.Printf("Received command: %s", cmd.Action)
+	case "add_breakpoint":
+		var bp BreakpointPayload
+		if err := json.Unmarshal(cmd.Payload, &bp); err != nil {
+			log.Printf("Error parsing breakpoint payload: %v", err)
+			sendError(conn, "", "invalid breakpoint payload", "parse_error")
+			return
+		}
+		log.Printf("Received command: %s file=%s line=%d", cmd.Action, bp.File, bp.Line)
+	default:
+		log.Printf("Unknown command action: %s", cmd.Action)
+		sendError(conn, "", "unknown command action: "+cmd.Action, "unknown_action")
+	}
 }
 
 // execDebugAction dispatches a step/continue action to the active debugger client.
